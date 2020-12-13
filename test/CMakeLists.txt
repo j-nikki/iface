@@ -2,8 +2,6 @@
 # This CMake file is concerned with the testing of the iface library.
 #
 
-cmake_minimum_required (VERSION 3.8)
-
 enable_testing()
 
 # Target without output, running it will run all unit tests
