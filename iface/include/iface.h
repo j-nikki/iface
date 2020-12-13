@@ -1,6 +1,5 @@
 ﻿#include <array>
 #include <boost/preprocessor/punctuation/comma_if.hpp>
-#include <boost/preprocessor/seq/for_each.hpp>
 #include <boost/preprocessor/seq/for_each_i.hpp>
 #include <boost/preprocessor/seq/seq.hpp>
 #include <boost/preprocessor/seq/variadic_seq_to_seq.hpp>
@@ -82,7 +81,7 @@ struct glue<R(Args...), Fn> {
     }
 #define IFACE_ptrget(r, _, i, x)                                               \
     BOOST_PP_COMMA_IF(i)                                                       \
-    &::iface::detail::glue<BOOST_PP_TUPLE_REM() BOOST_PP_TUPLE_POP_FRONT(x),   \
+    &::iface::detail::glue<BOOST_PP_TUPLE_REM(1) BOOST_PP_TUPLE_POP_FRONT(x),  \
                            decltype(IFACE_call(BOOST_PP_SEQ_HEAD(x)))>::fn
 
 //
@@ -114,10 +113,10 @@ struct sig<R(Args...)> : sig<sig<>, R, Args...> {
             };                                                                 \
             return Fn{Token{}};                                                \
         }                                                                      \
-            .template operator()<BOOST_PP_TUPLE_REM() BOOST_PP_IF(             \
+            .template operator()<BOOST_PP_TUPLE_REM(1) BOOST_PP_IF(            \
                 i, (BOOST_PP_CAT(Fn, BOOST_PP_DEC(i))),                        \
                 (::iface::detail::Iface_base<Tbl, Token, TblGetter>))>(        \
-                ::iface::detail::sig<BOOST_PP_TUPLE_REM()                      \
+                ::iface::detail::sig<BOOST_PP_TUPLE_REM(1)                     \
                                          BOOST_PP_TUPLE_POP_FRONT(x)>{}));
 
 //
