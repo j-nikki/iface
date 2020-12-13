@@ -4,9 +4,8 @@
 
 cmake_minimum_required (VERSION 3.8)
 
-add_library(iface INTERFACE "iface.h")
+add_library(iface INTERFACE)
 
-find_package(benchmark CONFIG REQUIRED)
-target_link_libraries(iface INTERFACE  benchmark::benchmark benchmark::benchmark_main)
 find_path(BOOST_PREPROCESSOR_INCLUDE_DIRS "boost/preprocessor.hpp")
 target_include_directories(iface INTERFACE ${BOOST_PREPROCESSOR_INCLUDE_DIRS})
+target_include_directories(iface INTERFACE "include")
