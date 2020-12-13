@@ -8,14 +8,38 @@ int main()
     //
     {
         struct {
-            int f() { return 0; }
-            int g() { return 1; }
-            int h() { return 2; }
+            int f() { return 1; }
+            int g() { return 2; }
+            int h() { return 3; }
         } s;
         IFACE((f, int())(g, int())(h, int())) lifted = s;
-        ASSERT(lifted.f() == 0);
-        ASSERT(lifted.g() == 1);
-        ASSERT(lifted.h() == 2);
+        ASSERT(lifted.f() == 1);
+        ASSERT(lifted.g() == 2);
+        ASSERT(lifted.h() == 3);
+    }
+
+    //
+    // Object address is passed correctly
+    //
+    {
+        struct {
+            intptr_t f() { return (intptr_t)(void *)this; }
+        } s;
+        ASSERT(IFACE((f, intptr_t())){s}.f() == s.f());
+    }
+
+    //
+    // Object members are normally accessible
+    //
+    {
+        struct {
+            int x{1}, y{2};
+            int f() { return x; }
+            int g() { return y; }
+        } s;
+        IFACE((f, int())(g, int())) lifted = s;
+        ASSERT(lifted.f() == 1);
+        ASSERT(lifted.g() == 2);
     }
 
     //
