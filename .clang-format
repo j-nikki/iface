@@ -1,0 +1,8 @@
+ColumnLimit: 80
+BreakBeforeBraces: Linux
+IndentWidth: 4
+AlignConsecutiveAssignments: true
+ReflowComments: true
+AlwaysBreakTemplateDeclarations: Yes
+AllowShortFunctionsOnASingleLine: Inline
+CommentPragmas: '\/ .*'
