@@ -8,5 +8,10 @@ project (iface VERSION 0.0.1 LANGUAGES CXX )
 set (CMAKE_CXX_STANDARD 20)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# We use vcpkg as a submodule
+set(CMAKE_TOOLCHAIN_FILE ${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake
+  CACHE STRING "Vcpkg toolchain file")
+include(${CMAKE_TOOLCHAIN_FILE})
+
 add_subdirectory ("iface")
 add_subdirectory ("test")
