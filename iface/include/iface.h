@@ -36,20 +36,12 @@ namespace detail
 //
 
 template <class T>
-constexpr void *to_opaque(T &obj) noexcept
+IFACE_INLINE void *to_opaque(T &obj) noexcept
 {
     if constexpr (is_soo_apt<T>::value) {
-        auto res = [] {
-            if constexpr (std::is_constant_evaluated()) {
-                return std::array<char, 8>{};
-            } else {
-                std::array<char, 8> res;
-                return res;
-            }
-        }();
-        auto x_as_chars = std::bit_cast<std::array<char, sizeof(T)>>(obj);
-        std::copy_n(x_as_chars.begin(), sizeof(T), res.begin());
-        return std::bit_cast<void *>(res);
+        void *res;
+        memcpy(&res, std::addressof(obj), sizeof(T));
+        return res;
     } else
         return const_cast<void *>(
             reinterpret_cast<const void *>(std::addressof(obj)));
