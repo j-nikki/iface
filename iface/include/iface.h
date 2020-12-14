@@ -1,4 +1,5 @@
 ﻿#include <array>
+#include <boost/preprocessor/control/expr_iif.hpp>
 #include <boost/preprocessor/punctuation/comma_if.hpp>
 #include <boost/preprocessor/seq/for_each_i.hpp>
 #include <boost/preprocessor/seq/seq.hpp>
@@ -12,10 +13,18 @@ namespace iface
 {
 
 #ifdef _MSC_VER
-#define IFACE_INLINE __forceinline inline
+#define IFACE_INLINE __forceinline
 #else
 #define IFACE_INLINE inline
 #endif
+
+template <class T>
+struct is_soo_apt
+    : std::bool_constant<sizeof(T) <= sizeof(void *) &&
+                         std::is_trivially_copy_constructible_v<T> &&
+                         std::is_trivially_destructible_v<T> &&
+                         std::is_const_v<T>> {
+};
 
 namespace detail
 {
@@ -25,6 +34,26 @@ namespace detail
 // that each point to functions of an implementing class. It also contains
 // reference to an object of that class.
 //
+
+template <class T>
+constexpr void *to_opaque(T &obj) noexcept
+{
+    if constexpr (is_soo_apt<T>::value) {
+        auto res = [] {
+            if constexpr (std::is_constant_evaluated()) {
+                return std::array<char, 8>{};
+            } else {
+                std::array<char, 8> res;
+                return res;
+            }
+        }();
+        auto x_as_chars = std::bit_cast<std::array<char, sizeof(T)>>(obj);
+        std::copy_n(x_as_chars.begin(), sizeof(T), res.begin());
+        return std::bit_cast<void *>(res);
+    } else
+        return const_cast<void *>(
+            reinterpret_cast<const void *>(std::addressof(obj)));
+}
 
 template <class Tbl, class Token, class TblGetter>
 struct Iface_base : protected std::tuple<const Tbl &, void *> {
@@ -37,18 +66,38 @@ struct Iface_base : protected std::tuple<const Tbl &, void *> {
     static constexpr Tbl Table_for = TblGetter{}.template operator()<T>();
 
   public:
-    constexpr IFACE_INLINE Iface_base(Token &&)
+    constexpr IFACE_INLINE Iface_base(Token &&) noexcept
         : base_type{std::declval<Tbl &>(), nullptr}
     {
     }
     template <class T>
-    constexpr IFACE_INLINE Iface_base(T &obj)
-        : base_type{Table_for<std::remove_const_t<T>>, std::addressof(obj)}
+    constexpr IFACE_INLINE Iface_base(T &obj) noexcept
+        : base_type{Table_for<T>, to_opaque(obj)}
     {
-        static_assert(!std::is_const_v<T>,
-                      "const objects not yet supported"); // another TODO: SOO
     }
 };
+
+//
+// Signature inspection facility
+//
+
+template <bool Const, class RetTy, class... Args>
+struct sig {
+};
+
+template <class>
+struct sig_impl;
+template <class R, class... Args>
+struct sig_impl<R(Args...)> {
+    using type = sig<false, R, Args...>;
+};
+template <class R, class... Args>
+struct sig_impl<R(Args...) const> {
+    using type = sig<true, R, Args...>;
+};
+
+template <class T>
+using sig_t = typename sig_impl<T>::type;
 
 //
 // We can't form pointers directly into the implementing classes' member
@@ -57,67 +106,85 @@ struct Iface_base : protected std::tuple<const Tbl &, void *> {
 //
 
 template <class T>
-using Fwd_t = std::conditional_t<std::is_lvalue_reference_v<T>, T,
+using fwd_t = std::conditional_t<std::is_lvalue_reference_v<T>, T,
                                  std::remove_reference_t<T>>;
 
 template <class, class>
 struct glue;
-template <class R, class... Args, class Fn>
-struct glue<R(Args...), Fn> {
-    static R fn(void *object, Fwd_t<Args>... args)
+template <bool C, class R, class... Args, class Fn>
+struct glue<sig<C, R, Args...>, Fn> {
+    static R fn(std::conditional_t<C, const void *, void *> object,
+                fwd_t<Args>... args)
     {
         return Fn{}(object, args...);
     }
 };
 
+template <class T, class Obj>
+constexpr auto obj_cast(Obj &obj) noexcept
+{
+    auto const ptr = (is_soo_apt<T>::value) ? std::addressof(obj) : obj;
+    if constexpr (std::is_same_v<Obj, const void *>)
+        return reinterpret_cast<const T *>(ptr);
+    else if constexpr (std::is_const_v<std::remove_reference_t<T>>)
+        static_assert(
+            false,
+            "a const-qualified object cannot satisfy an interface with a "
+            "non-const-qualified member function");
+    else
+        return reinterpret_cast<T *>(ptr);
+}
+
 #define IFACE_call(f)                                                          \
-    []<class... Args>(void *obj, Args &&...args) noexcept(                     \
-        noexcept(                                                              \
-            reinterpret_cast<T *>(obj)->f(static_cast<Args &&>(args)...)))     \
-        ->decltype(                                                            \
-            reinterpret_cast<T *>(obj)->f(static_cast<Args &&>(args)...))      \
+    []<class Obj, class... Args>(Obj obj, Args && ...args) noexcept(           \
+        noexcept(::iface::detail::obj_cast<T>(obj)->f(                         \
+            static_cast<Args &&>(args)...)))                                   \
+        ->decltype(::iface::detail::obj_cast<T>(obj)->f(                       \
+            static_cast<Args &&>(args)...))                                    \
     {                                                                          \
-        return reinterpret_cast<T *>(obj)->f(static_cast<Args &&>(args)...);   \
+        return ::iface::detail::obj_cast<T>(obj)->f(                           \
+            static_cast<Args &&>(args)...);                                    \
     }
 #define IFACE_ptrget(r, _, i, x)                                               \
     BOOST_PP_COMMA_IF(i)                                                       \
-    &::iface::detail::glue<BOOST_PP_TUPLE_REM(1) BOOST_PP_TUPLE_POP_FRONT(x),  \
+    &::iface::detail::glue<::iface::detail::sig_t<BOOST_PP_TUPLE_REM(          \
+                               1) BOOST_PP_TUPLE_POP_FRONT(x)>,                \
                            decltype(IFACE_call(BOOST_PP_SEQ_HEAD(x)))>::fn
 
 //
 // Exposing the functions through a clean interface.
 //
 
-template <class...>
-struct sig {
-};
-
-template <class R, class... Args>
-struct sig<R(Args...)> : sig<sig<>, R, Args...> {
-};
+#define IFACE_mem_fn_ret(i, x, const_)                                         \
+    struct Fn : Base {                                                         \
+        using Base::Base;                                                      \
+        R IFACE_INLINE BOOST_PP_SEQ_HEAD(x)(Args && ...args)                   \
+            BOOST_PP_EXPR_IIF(const_, const)                                   \
+        {                                                                      \
+            return reinterpret_cast<R (*)(const void *,                        \
+                                          ::iface::detail::fwd_t<Args>...)>(   \
+                ::std::get<0>(*this)[i])(::std::get<1>(*this),                 \
+                                         static_cast<Args &&>(args)...);       \
+        }                                                                      \
+    };                                                                         \
+    return Fn{Token{}};
 
 // Build often when modifying this macro - ICE-prone
 #define IFACE_mem_fn(r, _, i, x)                                               \
     using BOOST_PP_CAT(Fn, i) = decltype(                                      \
-        []<class Base, class R, class... Args>(                                \
-            ::iface::detail::sig<::iface::detail::sig<>, R, Args...>) {        \
-            struct Fn : Base {                                                 \
-                using Base::Base;                                              \
-                R IFACE_INLINE BOOST_PP_SEQ_HEAD(x)(Args && ...args) const     \
-                {                                                              \
-                    return reinterpret_cast<R (*)(                             \
-                        void *, ::iface::detail::Fwd_t<Args>...)>(             \
-                        ::std::get<0>(*this)[i])(                              \
-                        ::std::get<1>(*this), static_cast<Args &&>(args)...);  \
-                }                                                              \
-            };                                                                 \
-            return Fn{Token{}};                                                \
+        []<class Base, bool C, class R, class... Args>(                        \
+            ::iface::detail::sig<C, R, Args...>) {                             \
+            if constexpr (C) {                                                 \
+                IFACE_mem_fn_ret(i, x, 1)                                      \
+            } else {                                                           \
+                IFACE_mem_fn_ret(i, x, 0)                                      \
+            }                                                                  \
         }                                                                      \
             .template operator()<BOOST_PP_TUPLE_REM(1) BOOST_PP_IF(            \
                 i, (BOOST_PP_CAT(Fn, BOOST_PP_DEC(i))),                        \
                 (::iface::detail::Iface_base<Tbl, Token, TblGetter>))>(        \
-                ::iface::detail::sig<BOOST_PP_TUPLE_REM(1)                     \
-                                         BOOST_PP_TUPLE_POP_FRONT(x)>{}));
+                ::iface::detail::sig_t<BOOST_PP_TUPLE_REM(1)                   \
+                                           BOOST_PP_TUPLE_POP_FRONT(x)>{}));
 
 //
 // All is brought together here. Lambdas in unevaluated contexts allow this
