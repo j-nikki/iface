@@ -1,5 +1,4 @@
-﻿#include <algorithm>
-#include <array>
+﻿#include <array>
 #include <boost/preprocessor/control/expr_iif.hpp>
 #include <boost/preprocessor/punctuation/comma_if.hpp>
 #include <boost/preprocessor/seq/for_each_i.hpp>
@@ -37,7 +36,7 @@ namespace detail
 //
 
 struct opaque {
-    constexpr IFACE_INLINE opaque(nullptr_t) noexcept : data_{nullptr} {}
+    constexpr IFACE_INLINE opaque(void *data) noexcept : data_{data} {}
 #pragma warning(push)
 #pragma warning(disable : 26495) // 'uninitialized member variable'
     template <class T>
@@ -92,20 +91,30 @@ constexpr IFACE_INLINE auto from_opaque(From &obj) noexcept
 // reference to an object of that class.
 //
 
+template <class T, class U>
+concept equal_base_as =
+    std::is_base_of_v<typename T::base_type, std::remove_cvref_t<U>> &&requires
+{
+    std::remove_cvref_t<U>::sigs;
+    T::sigs == std::remove_cvref_t<U>::sigs;
+}
+&&T::sigs == std::remove_cvref_t<U>::sigs;
+
 template <class Tbl, class Token, class TblGetter, class SigGetter>
 struct iface_base : protected std::tuple<opaque, const Tbl &> {
     // I resorted to tuple for data storage due to earlier code generating
     // redundant movaps+movdqa at call site (alignment issues?)
-  private:
+    using this_type = iface_base<Tbl, Token, TblGetter, SigGetter>;
     using base_type = std::tuple<opaque, const Tbl &>;
+
+    static constexpr auto sigs = SigGetter{}();
 
     template <class, class, class, class>
     friend struct iface_base;
 
+  private:
     template <class T>
     static constexpr Tbl table_for = TblGetter{}.template operator()<T>();
-
-    static constexpr auto sigs = SigGetter{}();
 
   public:
     constexpr IFACE_INLINE iface_base(Token &&) noexcept
@@ -115,17 +124,15 @@ struct iface_base : protected std::tuple<opaque, const Tbl &> {
 #pragma warning(push)
 #pragma warning(disable : 4268) // 'object filled with zeroes'
     template <class T>
-    requires !std::is_base_of_v<base_type, std::remove_cvref_t<T>> //
+    requires !equal_base_as<this_type, T> //
         constexpr IFACE_INLINE iface_base(T && obj) noexcept
         : base_type{static_cast<T &&>(obj), table_for<T>}
     {
     }
 #pragma warning(pop)
-    template <class T>
-    requires(std::is_base_of_v<base_type, std::remove_cvref_t<T>> &&T::sigs ==
-             sigs) //
-        constexpr IFACE_INLINE iface_base(const T &other) noexcept
-        : base_type(other)
+    template <equal_base_as<this_type> T>
+    constexpr IFACE_INLINE iface_base(const T &other) noexcept
+        : base_type{std::get<0>(other), std::get<1>(other)}
     {
     }
 };
@@ -135,18 +142,7 @@ struct iface_base : protected std::tuple<opaque, const Tbl &> {
 //
 
 template <bool Const, class RetTy, class... Args>
-struct sig {
-    std::string_view name;
-    constexpr bool
-    operator==(const sig<Const, RetTy, Args...> &rhs) const noexcept
-    {
-        return name == rhs.name;
-    }
-    template <class T>
-    constexpr bool operator==(T &&) const noexcept
-    {
-        return false;
-    }
+struct sig : std::string_view {
 };
 
 template <class>

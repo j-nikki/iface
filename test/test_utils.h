@@ -43,3 +43,5 @@ struct lhs_catcher {
                 }(wcsrchr(__FILEW__, '\\')),                                   \
                 ::test_utils::detail::error_msg.c_str()),                      \
             exit(1)))
+
+#define ASSERT_TRUE(expr) ASSERT((expr) == true)

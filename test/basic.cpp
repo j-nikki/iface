@@ -128,10 +128,37 @@ int main(int, char **argv)
         } s;
         IFACE((f, intptr_t())) lifted1 = s;
         IFACE((f, intptr_t())) lifted2 = lifted1;
-        static_assert(!std::is_constructible_v<decltype(lifted2),
-                                               const IFACE((g, intptr_t())) &>);
         ASSERT(lifted1.f() == s.f());
         ASSERT(lifted2.f() == s.f());
+    }
+
+    //
+    // equal_base_as works correctly
+    //
+    {
+        // these trigger 2057: expected constant expression (?)
+        // using iface::detail::equal_base_as;
+        // using If = IFACE((f, int()));
+        //
+        //// Same name and signature
+        // static_assert(equal_base_as<If, IFACE((f, int()))>);
+        //
+        //// Different name
+        // static_assert(!equal_base_as<If, IFACE((g, int()))>);
+        //
+        //// Different signature
+        // static_assert(!equal_base_as<If, IFACE((f, float()))>);
+        //
+        //// Different constness
+        // static_assert(!equal_base_as<If, IFACE((f, int() const))>);
+        //
+        //// Same order
+        // static_assert(equal_base_as<IFACE((f, int())(g, int())),
+        //                            IFACE((f, int())(g, int()))>);
+        //
+        //// Wrong order
+        // static_assert(!equal_base_as<IFACE((f, int())(g, int())),
+        //                             IFACE((g, int())(f, int()))>);
     }
 
     printf("%s: ",
