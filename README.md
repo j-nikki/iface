@@ -29,7 +29,7 @@ int main() {
 }
 ```
 
-Example of code generation below. `Iface_base` occupies 16B (`tbl` 8B + `obj` 8B) and is hence stored on stack, its address passed in `rcx`, as per the [x64 calling convention](https://docs.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-160).
+Example of code generation below. `iface_base` occupies 16B (`tbl` 8B + `obj` 8B) and is hence stored on stack, its address passed in `rcx`, as per the [x64 calling convention](https://docs.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-160).
 
 ```c++
 int __declspec(noinline) foo(IFACE((f, int() const)) x) { return x.f(); }

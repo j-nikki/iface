@@ -81,31 +81,31 @@ constexpr IFACE_INLINE auto from_opaque(From &obj) noexcept
 }
 
 //
-// Iface_base contains reference to the vtable - an array of (opaque) pointers
+// iface_base contains reference to the vtable - an array of (opaque) pointers
 // that each point to functions of an implementing class. It also contains
 // reference to an object of that class.
 //
 
 template <class Tbl, class Token, class TblGetter>
-struct Iface_base : protected std::tuple<opaque, const Tbl &> {
+struct iface_base : protected std::tuple<opaque, const Tbl &> {
     // I resorted to tuple for data storage due to earlier code generating
     // redundant movaps+movdqa at call site (alignment issues?)
   private:
     using base_type = std::tuple<opaque, const Tbl &>;
 
     template <class T>
-    static constexpr Tbl Table_for = TblGetter{}.template operator()<T>();
+    static constexpr Tbl table_for = TblGetter{}.template operator()<T>();
 
   public:
-    constexpr IFACE_INLINE Iface_base(Token &&) noexcept
+    constexpr IFACE_INLINE iface_base(Token &&) noexcept
         : base_type{nullptr, std::declval<Tbl &>()}
     {
     }
 #pragma warning(push)
 #pragma warning(disable : 4268) // 'object filled with zeroes'
     template <class T>
-    constexpr IFACE_INLINE Iface_base(T &&obj) noexcept
-        : base_type{static_cast<T &&>(obj), Table_for<T>}
+    constexpr IFACE_INLINE iface_base(T &&obj) noexcept
+        : base_type{static_cast<T &&>(obj), table_for<T>}
     {
     }
 #pragma warning(pop)
@@ -202,7 +202,7 @@ struct glue<sig<C, R, Args...>, Fn> {
         }                                                                      \
             .template operator()<BOOST_PP_TUPLE_REM(1) BOOST_PP_IF(            \
                 i, (BOOST_PP_CAT(Fn, BOOST_PP_DEC(i))),                        \
-                (::iface::detail::Iface_base<Tbl, Token, TblGetter>))>(        \
+                (::iface::detail::iface_base<Tbl, Token, TblGetter>))>(        \
                 ::iface::detail::sig_t<BOOST_PP_TUPLE_ELEM(1, x)>{}));
 
 //
