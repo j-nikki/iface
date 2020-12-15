@@ -12,8 +12,8 @@
 namespace iface
 {
 
-#ifdef _MSC_VER
-#define IFACE_INLINE __forceinline
+#if defined(_MSC_VER) && !defined(__INTEL_COMPILER) && _MSC_VER >= 1310
+#define IFACE_INLINE inline __forceinline
 #else
 #define IFACE_INLINE inline
 #endif
@@ -35,9 +35,9 @@ namespace detail
 //
 
 struct opaque {
-    constexpr opaque(nullptr_t) noexcept : data_{nullptr} {}
+    constexpr IFACE_INLINE opaque(nullptr_t) noexcept : data_{nullptr} {}
     template <class T>
-    constexpr opaque(T &&x) noexcept
+    constexpr IFACE_INLINE opaque(T &&x) noexcept
     {
         if constexpr (is_soo_apt<T>::value) {
             new (&data_) std::remove_cvref_t<T>{static_cast<T &&>(x)};
@@ -48,30 +48,33 @@ struct opaque {
             static_assert(false,
                           "move constructor is prohibited for this type");
     }
-    constexpr operator void *() noexcept { return data_; }
-    constexpr operator const void *() const noexcept { return data_; }
+    constexpr IFACE_INLINE operator void *() noexcept { return data_; }
+    constexpr IFACE_INLINE operator const void *() const noexcept
+    {
+        return data_;
+    }
 
   private:
     void *data_;
 };
 
-template <class T, class Obj>
-constexpr IFACE_INLINE auto from_opaque(Obj &obj) noexcept
+template <class To, class From>
+constexpr IFACE_INLINE auto from_opaque(From &obj) noexcept
 {
     static_assert(
-        !is_soo_apt<T>::value || std::is_same_v<Obj, const void *>,
+        !is_soo_apt<To>::value || std::is_same_v<From, const void *>,
         "SOO instances aren't mutable; use only const interface member "
         "functions or define iface::is_soo_apt<...> : std::false_type {};");
-    auto const ptr = (is_soo_apt<T>::value) ? std::addressof(obj) : obj;
-    if constexpr (std::is_same_v<Obj, const void *>)
-        return reinterpret_cast<const std::remove_reference_t<T> *>(ptr);
-    else if constexpr (std::is_const_v<std::remove_reference_t<T>>)
+    auto const ptr = (is_soo_apt<To>::value) ? std::addressof(obj) : obj;
+    if constexpr (std::is_same_v<From, const void *>)
+        return reinterpret_cast<const std::remove_reference_t<To> *>(ptr);
+    else if constexpr (std::is_const_v<std::remove_reference_t<To>>)
         static_assert(
             false,
             "a const-qualified object cannot satisfy an interface with a "
             "non-const-qualified member function");
     else
-        return reinterpret_cast<std::remove_reference_t<T> *>(ptr);
+        return reinterpret_cast<std::remove_reference_t<To> *>(ptr);
 }
 
 //
@@ -95,11 +98,14 @@ struct Iface_base : protected std::tuple<const Tbl &, opaque> {
         : base_type{std::declval<Tbl &>(), nullptr}
     {
     }
+#pragma warning(push)
+#pragma warning(disable : 4268) // 'object filled with zeroes'
     template <class T>
     constexpr IFACE_INLINE Iface_base(T &&obj) noexcept
         : base_type{Table_for<T>, static_cast<T &&>(obj)}
     {
     }
+#pragma warning(pop)
 };
 
 //
@@ -146,7 +152,7 @@ struct glue<sig<C, R, Args...>, Fn> {
 };
 
 #define IFACE_call(f)                                                          \
-    []<class Obj, class... Args>(Obj & obj, Args && ...args) noexcept(         \
+    []<class From, class... Args>(From & obj, Args && ...args) noexcept(       \
         noexcept(::iface::detail::from_opaque<T>(obj)->f(                      \
             static_cast<Args &&>(args)...)))                                   \
         ->decltype(::iface::detail::from_opaque<T>(obj)->f(                    \
@@ -159,7 +165,8 @@ struct glue<sig<C, R, Args...>, Fn> {
     BOOST_PP_COMMA_IF(i)                                                       \
     &::iface::detail::glue<::iface::detail::sig_t<BOOST_PP_TUPLE_REM(          \
                                1) BOOST_PP_TUPLE_POP_FRONT(x)>,                \
-                           decltype(IFACE_call(BOOST_PP_SEQ_HEAD(x)))>::fn
+                           decltype(                                           \
+                               IFACE_call(BOOST_PP_TUPLE_ELEM(0, x)))>::fn
 
 //
 // Exposing the functions through a clean interface.
@@ -168,7 +175,7 @@ struct glue<sig<C, R, Args...>, Fn> {
 #define IFACE_mem_fn_ret(i, x, const_)                                         \
     struct Fn : Base {                                                         \
         using Base::Base;                                                      \
-        R IFACE_INLINE BOOST_PP_SEQ_HEAD(x)(Args && ...args)                   \
+        R IFACE_INLINE BOOST_PP_TUPLE_ELEM(0, x)(Args && ...args)              \
             BOOST_PP_EXPR_IIF(const_, const)                                   \
         {                                                                      \
             return reinterpret_cast<R (*)(const void *,                        \

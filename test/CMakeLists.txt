@@ -9,6 +9,10 @@ add_custom_target(tests
   COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
   USES_TERMINAL)
 
+# W4 and WX help catching bugs at compile time
+string(REPLACE "/W3" "/W4" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /WX")
+
 # Iterate over all .cpp files from this dir
 file(GLOB_RECURSE UNIT_TESTS "*.cpp")
 foreach(ut IN LISTS UNIT_TESTS)
