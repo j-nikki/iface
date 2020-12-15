@@ -91,13 +91,13 @@ int main(int, char **argv)
     // Virtual table is accessed into correctly for SOO-interfaces
     //
     {
-        const struct {
+        struct S {
             int f() const { return 1; }
             int g() const { return 2; }
             int h() const { return 3; }
-        } s;
-        static_assert(iface::is_soo_apt<decltype(s)>::value);
-        IFACE((f, int() const)(g, int() const)(h, int() const)) lifted = s;
+        };
+        static_assert(iface::is_soo_apt<decltype((S{}))>::value);
+        IFACE((f, int() const)(g, int() const)(h, int() const)) lifted = S{};
         ASSERT(lifted.f() == 1);
         ASSERT(lifted.g() == 2);
         ASSERT(lifted.h() == 3);
@@ -107,13 +107,13 @@ int main(int, char **argv)
     // Object members are correctly accessible for SOO-instances
     //
     {
-        const struct {
+        struct S {
             int x{1}, y{2};
             int f() const { return x; }
             int g() const { return y; }
-        } s;
-        static_assert(iface::is_soo_apt<decltype(s)>::value);
-        IFACE((f, int() const)(g, int() const)) lifted = s;
+        };
+        static_assert(iface::is_soo_apt<decltype(S{})>::value);
+        IFACE((f, int() const)(g, int() const)) lifted = S{};
         ASSERT(lifted.f() == 1);
         ASSERT(lifted.g() == 2);
     }

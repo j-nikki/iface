@@ -23,7 +23,7 @@ struct is_soo_apt
     : std::bool_constant<sizeof(T) <= sizeof(void *) &&
                          std::is_trivially_copy_constructible_v<T> &&
                          std::is_trivially_destructible_v<T> &&
-                         std::is_const_v<T>> {
+                         !std::is_lvalue_reference_v<T>> {
 };
 
 namespace detail
@@ -35,30 +35,36 @@ namespace detail
 //
 
 template <class T>
-IFACE_INLINE void *to_opaque(T &obj) noexcept
+IFACE_INLINE void *to_opaque(T &&obj) noexcept
 {
     if constexpr (is_soo_apt<T>::value) {
         void *res;
-        new (&res) std::remove_cvref_t<T>{obj};
+        new (&res) std::remove_cvref_t<T>{static_cast<T &&>(obj)};
         return res;
-    } else
+    } else if constexpr (std::is_lvalue_reference_v<T>) {
         return const_cast<void *>(
             reinterpret_cast<const void *>(std::addressof(obj)));
+    } else
+        static_assert(false, "move constructor is prohibited for this type");
 }
 
 template <class T, class Obj>
 constexpr IFACE_INLINE auto from_opaque(Obj &obj) noexcept
 {
+    static_assert(
+        !is_soo_apt<T>::value || std::is_same_v<Obj, const void *>,
+        "SOO instances aren't mutable; use only const interface member "
+        "functions or define iface::is_soo_apt<...> : std::false_type {};");
     auto const ptr = (is_soo_apt<T>::value) ? std::addressof(obj) : obj;
     if constexpr (std::is_same_v<Obj, const void *>)
-        return reinterpret_cast<const T *>(ptr);
+        return reinterpret_cast<const std::remove_reference_t<T> *>(ptr);
     else if constexpr (std::is_const_v<std::remove_reference_t<T>>)
         static_assert(
             false,
             "a const-qualified object cannot satisfy an interface with a "
             "non-const-qualified member function");
     else
-        return reinterpret_cast<T *>(ptr);
+        return reinterpret_cast<std::remove_reference_t<T> *>(ptr);
 }
 
 //
@@ -83,8 +89,8 @@ struct Iface_base : protected std::tuple<const Tbl &, void *> {
     {
     }
     template <class T>
-    constexpr IFACE_INLINE Iface_base(T &obj) noexcept
-        : base_type{Table_for<T>, to_opaque(obj)}
+    constexpr IFACE_INLINE Iface_base(T &&obj) noexcept
+        : base_type{Table_for<T>, to_opaque(static_cast<T &&>(obj))}
     {
     }
 };
@@ -133,7 +139,7 @@ struct glue<sig<C, R, Args...>, Fn> {
 };
 
 #define IFACE_call(f)                                                          \
-    []<class Obj, class... Args>(Obj obj, Args && ...args) noexcept(           \
+    []<class Obj, class... Args>(Obj & obj, Args && ...args) noexcept(         \
         noexcept(::iface::detail::from_opaque<T>(obj)->f(                      \
             static_cast<Args &&>(args)...)))                                   \
         ->decltype(::iface::detail::from_opaque<T>(obj)->f(                    \
