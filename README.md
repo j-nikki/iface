@@ -29,4 +29,4 @@ int main() {
 }
 ```
 
-Things at the moment missing but on the agenda are SOO and support for const semantics, as well as setting up DevOps. The library has been compiled on VS 2019 Preview only.
+Currently tested on VS 2019 Preview only.
