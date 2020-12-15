@@ -36,6 +36,8 @@ namespace detail
 
 struct opaque {
     constexpr IFACE_INLINE opaque(nullptr_t) noexcept : data_{nullptr} {}
+#pragma warning(push)
+#pragma warning(disable : 26495) // 'uninitialized member variable'
     template <class T>
     constexpr IFACE_INLINE opaque(T &&x) noexcept
     {
@@ -48,6 +50,7 @@ struct opaque {
             static_assert(false,
                           "move constructor is prohibited for this type");
     }
+#pragma warning(pop)
     constexpr IFACE_INLINE operator void *() noexcept { return data_; }
     constexpr IFACE_INLINE operator const void *() const noexcept
     {
@@ -84,25 +87,25 @@ constexpr IFACE_INLINE auto from_opaque(From &obj) noexcept
 //
 
 template <class Tbl, class Token, class TblGetter>
-struct Iface_base : protected std::tuple<const Tbl &, opaque> {
+struct Iface_base : protected std::tuple<opaque, const Tbl &> {
     // I resorted to tuple for data storage due to earlier code generating
     // redundant movaps+movdqa at call site (alignment issues?)
   private:
-    using base_type = std::tuple<const Tbl &, opaque>;
+    using base_type = std::tuple<opaque, const Tbl &>;
 
     template <class T>
     static constexpr Tbl Table_for = TblGetter{}.template operator()<T>();
 
   public:
     constexpr IFACE_INLINE Iface_base(Token &&) noexcept
-        : base_type{std::declval<Tbl &>(), nullptr}
+        : base_type{nullptr, std::declval<Tbl &>()}
     {
     }
 #pragma warning(push)
 #pragma warning(disable : 4268) // 'object filled with zeroes'
     template <class T>
     constexpr IFACE_INLINE Iface_base(T &&obj) noexcept
-        : base_type{Table_for<T>, static_cast<T &&>(obj)}
+        : base_type{static_cast<T &&>(obj), Table_for<T>}
     {
     }
 #pragma warning(pop)
@@ -180,7 +183,7 @@ struct glue<sig<C, R, Args...>, Fn> {
         {                                                                      \
             return reinterpret_cast<R (*)(const void *,                        \
                                           ::iface::detail::fwd_t<Args>...)>(   \
-                ::std::get<0>(*this)[i])(::std::get<1>(*this),                 \
+                ::std::get<1>(*this)[i])(::std::get<0>(*this),                 \
                                          static_cast<Args &&>(args)...);       \
         }                                                                      \
     };                                                                         \
@@ -200,8 +203,7 @@ struct glue<sig<C, R, Args...>, Fn> {
             .template operator()<BOOST_PP_TUPLE_REM(1) BOOST_PP_IF(            \
                 i, (BOOST_PP_CAT(Fn, BOOST_PP_DEC(i))),                        \
                 (::iface::detail::Iface_base<Tbl, Token, TblGetter>))>(        \
-                ::iface::detail::sig_t<BOOST_PP_TUPLE_REM(1)                   \
-                                           BOOST_PP_TUPLE_POP_FRONT(x)>{}));
+                ::iface::detail::sig_t<BOOST_PP_TUPLE_ELEM(1, x)>{}));
 
 //
 // All is brought together here. Lambdas in unevaluated contexts allow this
