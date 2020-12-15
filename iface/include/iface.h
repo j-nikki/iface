@@ -30,9 +30,8 @@ namespace detail
 {
 
 //
-// Iface_base contains reference to the vtable - an array of (opaque) pointers
-// that each point to functions of an implementing class. It also contains
-// reference to an object of that class.
+// Opaque representation is void*. It can either hold an SOO-apt instance
+// in-place or point to an instance of an implementing class.
 //
 
 template <class T>
@@ -46,6 +45,27 @@ IFACE_INLINE void *to_opaque(T &obj) noexcept
         return const_cast<void *>(
             reinterpret_cast<const void *>(std::addressof(obj)));
 }
+
+template <class T, class Obj>
+constexpr IFACE_INLINE auto from_opaque(Obj &obj) noexcept
+{
+    auto const ptr = (is_soo_apt<T>::value) ? std::addressof(obj) : obj;
+    if constexpr (std::is_same_v<Obj, const void *>)
+        return reinterpret_cast<const T *>(ptr);
+    else if constexpr (std::is_const_v<std::remove_reference_t<T>>)
+        static_assert(
+            false,
+            "a const-qualified object cannot satisfy an interface with a "
+            "non-const-qualified member function");
+    else
+        return reinterpret_cast<T *>(ptr);
+}
+
+//
+// Iface_base contains reference to the vtable - an array of (opaque) pointers
+// that each point to functions of an implementing class. It also contains
+// reference to an object of that class.
+//
 
 template <class Tbl, class Token, class TblGetter>
 struct Iface_base : protected std::tuple<const Tbl &, void *> {
@@ -112,29 +132,14 @@ struct glue<sig<C, R, Args...>, Fn> {
     }
 };
 
-template <class T, class Obj>
-constexpr auto obj_cast(Obj &obj) noexcept
-{
-    auto const ptr = (is_soo_apt<T>::value) ? std::addressof(obj) : obj;
-    if constexpr (std::is_same_v<Obj, const void *>)
-        return reinterpret_cast<const T *>(ptr);
-    else if constexpr (std::is_const_v<std::remove_reference_t<T>>)
-        static_assert(
-            false,
-            "a const-qualified object cannot satisfy an interface with a "
-            "non-const-qualified member function");
-    else
-        return reinterpret_cast<T *>(ptr);
-}
-
 #define IFACE_call(f)                                                          \
     []<class Obj, class... Args>(Obj obj, Args && ...args) noexcept(           \
-        noexcept(::iface::detail::obj_cast<T>(obj)->f(                         \
+        noexcept(::iface::detail::from_opaque<T>(obj)->f(                      \
             static_cast<Args &&>(args)...)))                                   \
-        ->decltype(::iface::detail::obj_cast<T>(obj)->f(                       \
+        ->decltype(::iface::detail::from_opaque<T>(obj)->f(                    \
             static_cast<Args &&>(args)...))                                    \
     {                                                                          \
-        return ::iface::detail::obj_cast<T>(obj)->f(                           \
+        return ::iface::detail::from_opaque<T>(obj)->f(                        \
             static_cast<Args &&>(args)...);                                    \
     }
 #define IFACE_ptrget(r, _, i, x)                                               \
