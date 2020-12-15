@@ -34,19 +34,26 @@ namespace detail
 // in-place or point to an instance of an implementing class.
 //
 
-template <class T>
-IFACE_INLINE void *to_opaque(T &&obj) noexcept
-{
-    if constexpr (is_soo_apt<T>::value) {
-        void *res;
-        new (&res) std::remove_cvref_t<T>{static_cast<T &&>(obj)};
-        return res;
-    } else if constexpr (std::is_lvalue_reference_v<T>) {
-        return const_cast<void *>(
-            reinterpret_cast<const void *>(std::addressof(obj)));
-    } else
-        static_assert(false, "move constructor is prohibited for this type");
-}
+struct opaque {
+    constexpr opaque(nullptr_t) noexcept : data_{nullptr} {}
+    template <class T>
+    constexpr opaque(T &&x) noexcept
+    {
+        if constexpr (is_soo_apt<T>::value) {
+            new (&data_) std::remove_cvref_t<T>{static_cast<T &&>(x)};
+        } else if constexpr (std::is_lvalue_reference_v<T>) {
+            data_ = const_cast<void *>(
+                reinterpret_cast<const void *>(std::addressof(x)));
+        } else
+            static_assert(false,
+                          "move constructor is prohibited for this type");
+    }
+    constexpr operator void *() noexcept { return data_; }
+    constexpr operator const void *() const noexcept { return data_; }
+
+  private:
+    void *data_;
+};
 
 template <class T, class Obj>
 constexpr IFACE_INLINE auto from_opaque(Obj &obj) noexcept
@@ -74,11 +81,11 @@ constexpr IFACE_INLINE auto from_opaque(Obj &obj) noexcept
 //
 
 template <class Tbl, class Token, class TblGetter>
-struct Iface_base : protected std::tuple<const Tbl &, void *> {
+struct Iface_base : protected std::tuple<const Tbl &, opaque> {
     // I resorted to tuple for data storage due to earlier code generating
     // redundant movaps+movdqa at call site (alignment issues?)
   private:
-    using base_type = std::tuple<const Tbl &, void *>;
+    using base_type = std::tuple<const Tbl &, opaque>;
 
     template <class T>
     static constexpr Tbl Table_for = TblGetter{}.template operator()<T>();
@@ -90,7 +97,7 @@ struct Iface_base : protected std::tuple<const Tbl &, void *> {
     }
     template <class T>
     constexpr IFACE_INLINE Iface_base(T &&obj) noexcept
-        : base_type{Table_for<T>, to_opaque(static_cast<T &&>(obj))}
+        : base_type{Table_for<T>, static_cast<T &&>(obj)}
     {
     }
 };
