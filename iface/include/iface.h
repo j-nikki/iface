@@ -40,7 +40,7 @@ IFACE_INLINE void *to_opaque(T &obj) noexcept
 {
     if constexpr (is_soo_apt<T>::value) {
         void *res;
-        memcpy(&res, std::addressof(obj), sizeof(T));
+        new (&res) std::remove_cvref_t<T>{obj};
         return res;
     } else
         return const_cast<void *>(
