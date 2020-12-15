@@ -1,9 +1,11 @@
-﻿#include <array>
+﻿#include <algorithm>
+#include <array>
 #include <boost/preprocessor/control/expr_iif.hpp>
 #include <boost/preprocessor/punctuation/comma_if.hpp>
 #include <boost/preprocessor/seq/for_each_i.hpp>
 #include <boost/preprocessor/seq/seq.hpp>
 #include <boost/preprocessor/seq/variadic_seq_to_seq.hpp>
+#include <boost/preprocessor/stringize.hpp>
 #include <boost/preprocessor/tuple/pop_front.hpp>
 #include <boost/preprocessor/tuple/rem.hpp>
 #include <tuple>
@@ -42,13 +44,17 @@ struct opaque {
     constexpr IFACE_INLINE opaque(T &&x) noexcept
     {
         if constexpr (is_soo_apt<T>::value) {
+            static_assert(sizeof(T) <= sizeof(void *),
+                          "this type isn't small enough for SOO; remove custom "
+                          "iface::is_soo_apt specialization");
             new (&data_) std::remove_cvref_t<T>{static_cast<T &&>(x)};
         } else if constexpr (std::is_lvalue_reference_v<T>) {
             data_ = const_cast<void *>(
                 reinterpret_cast<const void *>(std::addressof(x)));
         } else
-            static_assert(false,
-                          "move constructor is prohibited for this type");
+            static_assert(false, "move constructor is prohibited for this "
+                                 "type; use copy construction or define "
+                                 "iface::is_soo_apt<...> : std::true_type {};");
     }
 #pragma warning(pop)
     constexpr IFACE_INLINE operator void *() noexcept { return data_; }
@@ -64,10 +70,10 @@ struct opaque {
 template <class To, class From>
 constexpr IFACE_INLINE auto from_opaque(From &obj) noexcept
 {
-    static_assert(
-        !is_soo_apt<To>::value || std::is_same_v<From, const void *>,
-        "SOO instances aren't mutable; use only const interface member "
-        "functions or define iface::is_soo_apt<...> : std::false_type {};");
+    static_assert(!is_soo_apt<To>::value || std::is_same_v<From, const void *>,
+                  "SOO instances aren't mutable; remove non-const-qualified "
+                  "interface member functions or define iface::is_soo_apt<...> "
+                  ": std::false_type {};");
     auto const ptr = (is_soo_apt<To>::value) ? std::addressof(obj) : obj;
     if constexpr (std::is_same_v<From, const void *>)
         return reinterpret_cast<const std::remove_reference_t<To> *>(ptr);
@@ -86,15 +92,20 @@ constexpr IFACE_INLINE auto from_opaque(From &obj) noexcept
 // reference to an object of that class.
 //
 
-template <class Tbl, class Token, class TblGetter>
+template <class Tbl, class Token, class TblGetter, class SigGetter>
 struct iface_base : protected std::tuple<opaque, const Tbl &> {
     // I resorted to tuple for data storage due to earlier code generating
     // redundant movaps+movdqa at call site (alignment issues?)
   private:
     using base_type = std::tuple<opaque, const Tbl &>;
 
+    template <class, class, class, class>
+    friend struct iface_base;
+
     template <class T>
     static constexpr Tbl table_for = TblGetter{}.template operator()<T>();
+
+    static constexpr auto sigs = SigGetter{}();
 
   public:
     constexpr IFACE_INLINE iface_base(Token &&) noexcept
@@ -104,11 +115,19 @@ struct iface_base : protected std::tuple<opaque, const Tbl &> {
 #pragma warning(push)
 #pragma warning(disable : 4268) // 'object filled with zeroes'
     template <class T>
-    constexpr IFACE_INLINE iface_base(T &&obj) noexcept
+    requires !std::is_base_of_v<base_type, std::remove_cvref_t<T>> //
+        constexpr IFACE_INLINE iface_base(T && obj) noexcept
         : base_type{static_cast<T &&>(obj), table_for<T>}
     {
     }
 #pragma warning(pop)
+    template <class T>
+    requires(std::is_base_of_v<base_type, std::remove_cvref_t<T>> &&T::sigs ==
+             sigs) //
+        constexpr IFACE_INLINE iface_base(const T &other) noexcept
+        : base_type(other)
+    {
+    }
 };
 
 //
@@ -117,6 +136,17 @@ struct iface_base : protected std::tuple<opaque, const Tbl &> {
 
 template <bool Const, class RetTy, class... Args>
 struct sig {
+    std::string_view name;
+    constexpr bool
+    operator==(const sig<Const, RetTy, Args...> &rhs) const noexcept
+    {
+        return name == rhs.name;
+    }
+    template <class T>
+    constexpr bool operator==(T &&) const noexcept
+    {
+        return false;
+    }
 };
 
 template <class>
@@ -132,6 +162,12 @@ struct sig_impl<R(Args...) const> {
 
 template <class T>
 using sig_t = typename sig_impl<T>::type;
+
+#define IFACE_sigget(r, _, i, x)                                               \
+    BOOST_PP_COMMA_IF(i)::iface::detail::sig_t<BOOST_PP_TUPLE_ELEM(1, x)>      \
+    {                                                                          \
+        BOOST_PP_STRINGIZE(BOOST_PP_TUPLE_ELEM(0, x))                          \
+    }
 
 //
 // We can't form pointers directly into the implementing classes' member
@@ -199,11 +235,11 @@ struct glue<sig<C, R, Args...>, Fn> {
             } else {                                                           \
                 IFACE_mem_fn_ret(i, x, 0)                                      \
             }                                                                  \
-        }                                                                      \
-            .template operator()<BOOST_PP_TUPLE_REM(1) BOOST_PP_IF(            \
-                i, (BOOST_PP_CAT(Fn, BOOST_PP_DEC(i))),                        \
-                (::iface::detail::iface_base<Tbl, Token, TblGetter>))>(        \
-                ::iface::detail::sig_t<BOOST_PP_TUPLE_ELEM(1, x)>{}));
+        }.template                                                             \
+        operator()<BOOST_PP_TUPLE_REM(1) BOOST_PP_IF(                          \
+            i, (BOOST_PP_CAT(Fn, BOOST_PP_DEC(i))),                            \
+            (::iface::detail::iface_base<Tbl, Token, TblGetter, SigGetter>))>( \
+            ::iface::detail::sig_t<BOOST_PP_TUPLE_ELEM(1, x)>{}));
 
 //
 // All is brought together here. Lambdas in unevaluated contexts allow this
@@ -217,6 +253,9 @@ struct glue<sig<C, R, Args...>, Fn> {
         using Tbl       = ::std::array<void *, BOOST_PP_SEQ_SIZE(s)>;          \
         using TblGetter = decltype([]<class T>() {                             \
             return Tbl{BOOST_PP_SEQ_FOR_EACH_I(IFACE_ptrget, _, s)};           \
+        });                                                                    \
+        using SigGetter = decltype([] {                                        \
+            return std::array{BOOST_PP_SEQ_FOR_EACH_I(IFACE_sigget, _, s)};    \
         });                                                                    \
         BOOST_PP_SEQ_FOR_EACH_I(IFACE_mem_fn, _, s)                            \
         return BOOST_PP_CAT(Fn, BOOST_PP_DEC(BOOST_PP_SEQ_SIZE(s))){Token{}};  \

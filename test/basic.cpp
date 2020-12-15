@@ -118,6 +118,22 @@ int main(int, char **argv)
         ASSERT(lifted.g() == 2);
     }
 
+    //
+    // Interface can be copy-constructed from another interface of same
+    // signatures+names
+    //
+    {
+        struct S {
+            intptr_t f() { return (intptr_t)(void *)this; }
+        } s;
+        IFACE((f, intptr_t())) lifted1 = s;
+        IFACE((f, intptr_t())) lifted2 = lifted1;
+        static_assert(!std::is_constructible_v<decltype(lifted2),
+                                               const IFACE((g, intptr_t())) &>);
+        ASSERT(lifted1.f() == s.f());
+        ASSERT(lifted2.f() == s.f());
+    }
+
     printf("%s: ",
            [&](auto x) { return x ? x + 1 : argv[0]; }(strrchr(argv[0], '\\')));
     printf("\u001b[32;1m%d assertion%s OK\u001b[0m\n", nassertions,
