@@ -1,6 +1,6 @@
 # iface
 
-This project brings non-intrusive interfaces similar to Go's to C++. Leveraging [P0315R4](https://wg21.link/P0315R4), iface allows you declare an 'anonymous interface' inside a function signature (see example below). Currently tested on VS 2019 Preview only.
+This project brings non-intrusive interfaces similar to Go's to C++. Leveraging [P0315R4](https://wg21.link/P0315R4), iface allows you declare an 'anonymous interface' inside a function signature - see example below. Currently tested on VS 2019 Preview only.
 
 ```c++
 #include <iface.h>
@@ -45,7 +45,7 @@ struct S { int f() const noexcept { return 42; } };
 int __declspec(noinline) calls_foo() { return foo(S{}); }
 //  sub         rsp,38h
 //  lea         rax,[S> (...)]
-//  lea         rcx,[rsp+20h]              ; Iface_base at [rsp+20h]
+//  lea         rcx,[rsp+20h]              ; iface_base at [rsp+20h]
 //  mov         qword ptr [rsp+20h],rax    ; set tbl
 //  call        foo (...)
 //  add         rsp,38h
