@@ -34,3 +34,4 @@
 # VS+CMake generated files
 .vs/
 out/
+build/

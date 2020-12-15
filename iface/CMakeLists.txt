@@ -1,5 +1,6 @@
 ﻿#
-# This is the CMake file for the target 'iface', a header-only library. Run 'vcpkg install' in the project root to get the dependencies referenced here.
+# This is the CMake file for the target 'iface', a header-only library. Run
+# 'vcpkg install' in the project root to get the dependencies referenced here.
 #
 
 add_library(iface INTERFACE)
