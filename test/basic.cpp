@@ -81,6 +81,7 @@ int main(int, char **argv)
             int g() const { return 2; }
             int h() const { return 3; }
         } s;
+        static_assert(!iface::is_soo_apt<decltype((s))>::value);
         IFACE((f, int() const)(g, int() const)(h, int() const)) lifted = s;
         ASSERT(lifted.f() == 1);
         ASSERT(lifted.g() == 2);
@@ -108,7 +109,7 @@ int main(int, char **argv)
     //
     {
         struct S {
-            int x{1}, y{2};
+            int16_t x{1}, y{2};
             int f() const { return x; }
             int g() const { return y; }
         };
@@ -130,6 +131,18 @@ int main(int, char **argv)
         IFACE((f, intptr_t())) lifted2 = lifted1;
         ASSERT(lifted1.f() == s.f());
         ASSERT(lifted2.f() == s.f());
+    }
+
+    //
+    // SOO-aptness depends on sizeof void*
+    //
+    {
+        const struct S {
+            int64_t x;
+            intptr_t f() const { return (intptr_t)(void *)this; }
+        } s{42};
+        ASSERT((IFACE((f, intptr_t() const)){s}.f() == s.f()) ==
+               (sizeof(intptr_t) <= sizeof(void *)));
     }
 
     //
