@@ -14,9 +14,9 @@ namespace iface
 {
 
 #if defined(_MSC_VER) && !defined(__INTEL_COMPILER) && _MSC_VER >= 1310
-#define IFACE_INLINE inline __forceinline
+#define IFACE_inline inline __forceinline
 #else
-#define IFACE_INLINE inline
+#define IFACE_inline inline
 #endif
 
 template <class T>
@@ -36,11 +36,11 @@ namespace detail
 //
 
 struct opaque {
-    constexpr IFACE_INLINE opaque(void *data) noexcept : data_{data} {}
+    constexpr IFACE_inline opaque(void *data) noexcept : data_{data} {}
 #pragma warning(push)
 #pragma warning(disable : 26495) // 'uninitialized member variable'
     template <class T>
-    constexpr IFACE_INLINE opaque(T &&x) noexcept
+    constexpr IFACE_inline opaque(T &&x) noexcept
     {
         if constexpr (is_soo_apt<T>::value) {
             static_assert(sizeof(T) <= sizeof(void *),
@@ -56,8 +56,8 @@ struct opaque {
                                  "iface::is_soo_apt<...> : std::true_type {};");
     }
 #pragma warning(pop)
-    constexpr IFACE_INLINE operator void *() noexcept { return data_; }
-    constexpr IFACE_INLINE operator const void *() const noexcept
+    constexpr IFACE_inline operator void *() noexcept { return data_; }
+    constexpr IFACE_inline operator const void *() const noexcept
     {
         return data_;
     }
@@ -67,7 +67,7 @@ struct opaque {
 };
 
 template <class To, class From>
-constexpr IFACE_INLINE auto from_opaque(From &obj) noexcept
+constexpr IFACE_inline auto from_opaque(From &obj) noexcept
 {
     static_assert(!is_soo_apt<To>::value || std::is_same_v<From, const void *>,
                   "SOO instances aren't mutable; remove non-const-qualified "
@@ -120,7 +120,7 @@ struct iface_base : protected std::tuple<opaque, const Tbl &> {
     static constexpr Tbl table_for = TblGetter{}.template operator()<T>();
 
   public:
-    explicit constexpr IFACE_INLINE iface_base(token &&) noexcept
+    explicit constexpr IFACE_inline iface_base(token &&) noexcept
         : base_type{nullptr, std::declval<Tbl &>()}
     {
     }
@@ -128,13 +128,13 @@ struct iface_base : protected std::tuple<opaque, const Tbl &> {
 #pragma warning(disable : 4268) // 'object filled with zeroes'
     template <class T>
     requires !equal_base_as<this_type, T> //
-        constexpr IFACE_INLINE iface_base(T && obj) noexcept
+        constexpr IFACE_inline iface_base(T && obj) noexcept
         : base_type{static_cast<T &&>(obj), table_for<T>}
     {
     }
 #pragma warning(pop)
     template <equal_base_as<this_type> T>
-    constexpr IFACE_INLINE iface_base(const T &other) noexcept
+    constexpr IFACE_inline iface_base(const T &other) noexcept
         : base_type{std::get<0>(other), std::get<1>(other)}
     {
     }
@@ -225,7 +225,7 @@ struct glue<sig<C, R, Args...>, Fn> {
 #define IFACE_mem_fn_ret(i, x, const_)                                         \
     struct Fn : Base {                                                         \
         using Base::Base;                                                      \
-        R IFACE_INLINE BOOST_PP_TUPLE_ELEM(0, x)(Args && ...args)              \
+        R IFACE_inline BOOST_PP_TUPLE_ELEM(0, x)(Args && ...args)              \
             BOOST_PP_EXPR_IIF(const_, const)                                   \
         {                                                                      \
             return reinterpret_cast<R (*)(const void *,                        \
