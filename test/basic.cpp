@@ -134,42 +134,54 @@ int main(int, char **argv)
     }
 
     //
-    // A copy-constructed base will copy the obj and tbl if and only if the
-    // constructed-from base compares equal
+    // A copy-constructed base will copy the obj and tbl if and only if
+    // constructed-from base is a superset
     //
     {
         using If1 = IFACE((f, int())(g, int()));
         struct S1 : If1 {
             using If1::If1;
-            const void *get_tbl_addr() { return std::get<1>(*this).data(); }
+            const void *get_tbl_addr() { return &std::get<1>(*this)[0]; }
             void *get_obj_addr() { return std::get<0>(*this); }
         };
 
         using If2 = IFACE((f, int())(g, int()));
-        struct S2 : If2 { // compares equal to S1
+        struct S2 : If2 {
             using If2::If2;
-            const void *get_tbl_addr() { return std::get<1>(*this).data(); }
+            const void *get_tbl_addr() { return &std::get<1>(*this)[0]; }
             void *get_obj_addr() { return std::get<0>(*this); }
         };
 
         using If3 = IFACE((f, int()));
-        struct S3 : If3 { // compares not equal to S1
+        struct S3 : If3 {
             using If3::If3;
-            const void *get_tbl_addr() { return std::get<1>(*this).data(); }
+            const void *get_tbl_addr() { return &std::get<1>(*this)[0]; }
             void *get_obj_addr() { return std::get<0>(*this); }
         };
 
-        struct S {
+        using If4 = IFACE((g, int())(f, int()));
+        struct S4 : If4 {
+            using If4::If4;
+            const void *get_tbl_addr() { return &std::get<1>(*this)[0]; }
+            void *get_obj_addr() { return std::get<0>(*this); }
+        };
+
+        struct {
             int f() { return 0; }
             int g() { return 0; }
         } s;
+
         S1 s1{s};
-        S2 s2{s1};
-        S3 s3{s1};
+        S2 s2{s1}; // equal => copy
+        S3 s3{s1}; // subset => copy
+        S4 s4{s1}; // wrong order => employ glue
+
         ASSERT(s2.get_tbl_addr() == s1.get_tbl_addr());
         ASSERT(s2.get_obj_addr() == s1.get_obj_addr());
-        ASSERT(s3.get_tbl_addr() != s1.get_tbl_addr());
-        ASSERT(s3.get_obj_addr() != s1.get_obj_addr());
+        ASSERT(s3.get_tbl_addr() == s1.get_tbl_addr());
+        ASSERT(s3.get_obj_addr() == s1.get_obj_addr());
+        ASSERT(s4.get_tbl_addr() != s1.get_tbl_addr());
+        ASSERT(s4.get_obj_addr() != s1.get_obj_addr());
     }
 
     //

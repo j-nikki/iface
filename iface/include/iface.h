@@ -1,4 +1,5 @@
-﻿#include <array>
+﻿#include <algorithm>
+#include <array>
 #include <boost/preprocessor/control/expr_iif.hpp>
 #include <boost/preprocessor/punctuation/comma_if.hpp>
 #include <boost/preprocessor/seq/for_each_i.hpp>
@@ -94,23 +95,25 @@ constexpr IFACE_inline auto from_opaque(From &obj) noexcept
 struct token {
 };
 
-template <class T, class U>
-concept equal_base_as =
-    std::is_base_of_v<typename T::base_type, std::remove_cvref_t<U>> &&requires
-{
-    std::remove_cvref_t<U>::sigs;
-    T::sigs == std::remove_cvref_t<U>::sigs;
-}
-&&T::sigs == std::remove_cvref_t<U>::sigs;
+template <class To, class From>
+concept convertible_base_to = To::is_subset_of(From::sigs);
 
 template <class Tbl, class TblGetter, class SigGetter>
-struct iface_base : protected std::tuple<opaque, const Tbl &> {
+struct iface_base : protected std::tuple<opaque, const void **> {
     // I resorted to tuple for data storage due to earlier code generating
     // redundant movaps+movdqa at call site (alignment issues?)
     using this_type = iface_base<Tbl, TblGetter, SigGetter>;
-    using base_type = std::tuple<opaque, const Tbl &>;
+    using base_type = std::tuple<opaque, const void **>;
 
     static constexpr auto sigs = SigGetter{}();
+
+    template <class T>
+    static constexpr bool is_subset_of(const T &x) noexcept
+    {
+        return sigs.size() <= x.size() &&
+               std::equal(x.begin(), std::next(x.begin(), sigs.size()),
+                          sigs.begin(), sigs.end());
+    }
 
     template <class, class, class>
     friend struct iface_base;
@@ -121,21 +124,21 @@ struct iface_base : protected std::tuple<opaque, const Tbl &> {
 
   public:
     explicit constexpr IFACE_inline iface_base(token &&) noexcept
-        : base_type{nullptr, std::declval<Tbl &>()}
+        : base_type{nullptr, nullptr}
     {
     }
 #pragma warning(push)
 #pragma warning(disable : 4268) // 'object filled with zeroes'
     template <class T>
-    requires !equal_base_as<this_type, T> //
-        constexpr IFACE_inline iface_base(T && obj) noexcept
-        : base_type{static_cast<T &&>(obj), table_for<T>}
+    requires(!convertible_base_to<this_type, std::remove_cvref_t<T>>) //
+        constexpr IFACE_inline iface_base(T &&obj) noexcept
+        : base_type{static_cast<T &&>(obj), (const void **)table_for<T>.data()}
     {
     }
 #pragma warning(pop)
-    template <equal_base_as<this_type> T>
-    constexpr IFACE_inline iface_base(const T &other) noexcept
-        : base_type{std::get<0>(other), std::get<1>(other)}
+    template <class... Ts>
+    constexpr IFACE_inline iface_base(const iface_base<Ts...> &other) noexcept
+        : base_type{std::get<0>(other), (const void **)std::get<1>(other)}
     {
     }
 };
@@ -145,7 +148,14 @@ struct iface_base : protected std::tuple<opaque, const Tbl &> {
 //
 
 template <bool Const, class RetTy, class... Args>
-struct sig : std::string_view {
+struct sig {
+    static constexpr auto get_signame(std::string_view name)
+    {
+        std::string_view sv = __FUNCSIG__;
+        auto startpos       = sv.find("::sig<") + 6;
+        auto endpos         = sv.rfind(">::get_signame(");
+        return std::pair{name, sv.substr(startpos, endpos - startpos)};
+    }
 };
 
 template <class>
@@ -163,10 +173,8 @@ template <class T>
 using sig_t = typename sig_impl<T>::type;
 
 #define IFACE_sigget(r, _, i, x)                                               \
-    BOOST_PP_COMMA_IF(i)::iface::detail::sig_t<BOOST_PP_TUPLE_ELEM(1, x)>      \
-    {                                                                          \
-        BOOST_PP_STRINGIZE(BOOST_PP_TUPLE_ELEM(0, x))                          \
-    }
+    BOOST_PP_COMMA_IF(i)::iface::detail::sig_t<BOOST_PP_TUPLE_ELEM(            \
+        1, x)>::get_signame(BOOST_PP_STRINGIZE(BOOST_PP_TUPLE_ELEM(0, x)))
 
 //
 // We can't form pointers directly into the implementing classes' member
@@ -228,8 +236,8 @@ struct glue<sig<C, R, Args...>, Fn> {
         R IFACE_inline BOOST_PP_TUPLE_ELEM(0, x)(Args && ...args)              \
             BOOST_PP_EXPR_IIF(const_, const)                                   \
         {                                                                      \
-            return reinterpret_cast<R (*)(const void *,                        \
-                                          ::iface::detail::fwd_t<Args>...)>(   \
+            return reinterpret_cast<R (*const)(                                \
+                const void *, ::iface::detail::fwd_t<Args>...)>(               \
                 ::std::get<1>(*this)[i])(::std::get<0>(*this),                 \
                                          static_cast<Args &&>(args)...);       \
         }                                                                      \
