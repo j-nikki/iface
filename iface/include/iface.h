@@ -96,7 +96,11 @@ struct token {
 };
 
 template <class To, class From>
-concept convertible_base_to = To::is_subset_of(From::sigs);
+concept convertible_base_to = To::sigs.size() <= From::sigs.size() &&
+                              std::equal(From::sigs.begin(),
+                                         std::next(From::sigs.begin(),
+                                                   To::sigs.size()),
+                                         To::sigs.begin(), To::sigs.end());
 
 template <class Tbl, class TblGetter, class SigGetter>
 struct iface_base : protected std::tuple<opaque, const void **> {
@@ -106,14 +110,6 @@ struct iface_base : protected std::tuple<opaque, const void **> {
     using base_type = std::tuple<opaque, const void **>;
 
     static constexpr auto sigs = SigGetter{}();
-
-    template <class T>
-    static constexpr bool is_subset_of(const T &x) noexcept
-    {
-        return sigs.size() <= x.size() &&
-               std::equal(x.begin(), std::next(x.begin(), sigs.size()),
-                          sigs.begin(), sigs.end());
-    }
 
     template <class, class, class>
     friend struct iface_base;
@@ -132,13 +128,17 @@ struct iface_base : protected std::tuple<opaque, const void **> {
     template <class T>
     requires(!convertible_base_to<this_type, std::remove_cvref_t<T>>) //
         constexpr IFACE_inline iface_base(T &&obj) noexcept
-        : base_type{static_cast<T &&>(obj), (const void **)table_for<T>.data()}
+        : base_type{static_cast<T &&>(obj),
+                    reinterpret_cast<const void **>(const_cast<void *>(
+                        reinterpret_cast<const void *>(table_for<T>.data())))}
     {
     }
 #pragma warning(pop)
     template <class... Ts>
     constexpr IFACE_inline iface_base(const iface_base<Ts...> &other) noexcept
-        : base_type{std::get<0>(other), (const void **)std::get<1>(other)}
+        : base_type{std::get<0>(other),
+                    reinterpret_cast<const void **>(const_cast<void *>(
+                        reinterpret_cast<const void *>(std::get<1>(other))))}
     {
     }
 };
