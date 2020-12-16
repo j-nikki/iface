@@ -175,14 +175,26 @@ template <class T>
 using fwd_t = std::conditional_t<std::is_lvalue_reference_v<T>, T,
                                  std::remove_reference_t<T>>;
 
+template <class R, class F>
+struct fallback : F {
+    using F::operator();
+    template <class... Ts>
+    requires !std::is_invocable_v<F, Ts &&...> //
+        constexpr R operator()(Ts &&...) noexcept
+    {
+        static_assert(false, "implementation violates interface contract; this "
+                             "is likely due to function signature mismatch");
+    }
+};
+
 template <class, class>
 struct glue;
 template <bool C, class R, class... Args, class Fn>
 struct glue<sig<C, R, Args...>, Fn> {
-    static R fn(std::conditional_t<C, const void *, void *> object,
-                fwd_t<Args>... args)
+    using object_ptr = std::conditional_t<C, const void *, void *>;
+    static R fn(object_ptr object, fwd_t<Args>... args)
     {
-        return Fn{}(object, args...);
+        return fallback<R, Fn>{}(object, args...);
     }
 };
 

@@ -9,14 +9,24 @@ namespace test_utils::detail
 {
 static std::string error_msg;
 template <class T>
+concept to_stringable = requires(const T &x)
+{
+    std::to_string(x);
+};
+template <class T>
 struct rhs_catcher {
     std::conditional_t<std::is_lvalue_reference_v<T>, T, std::decay_t<T>> lhs;
     template <class U>
     bool operator==(U &&rhs)
     {
+        auto to_string = []<class V>(const V &x) {
+            if constexpr (to_stringable<V>)
+                return std::to_string(x);
+            else
+                return "?";
+        };
         if (lhs != static_cast<U &&>(rhs)) {
-            (((error_msg = {}) += std::to_string(lhs)) += " == ") +=
-                std::to_string(rhs);
+            (((error_msg = {}) += to_string(lhs)) += " == ") += to_string(rhs);
             return false;
         }
         return true;

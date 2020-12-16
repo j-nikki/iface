@@ -134,6 +134,45 @@ int main(int, char **argv)
     }
 
     //
+    // A base copy-constructed from a base that compares equal will use the same
+    // obj and tbl
+    //
+    {
+        using If1 = IFACE((f, int())(g, int()));
+        struct S1 : If1 {
+            using If1::If1;
+            const void *get_tbl_addr() { return std::get<1>(*this).data(); }
+            void *get_obj_addr() { return std::get<0>(*this); }
+        };
+
+        using If2 = IFACE((f, int())(g, int()));
+        struct S2 : If2 { // compares equal to S1
+            using If2::If2;
+            const void *get_tbl_addr() { return std::get<1>(*this).data(); }
+            void *get_obj_addr() { return std::get<0>(*this); }
+        };
+
+        using If3 = IFACE((f, int()));
+        struct S3 : If3 { // compares not equal to S1
+            using If3::If3;
+            const void *get_tbl_addr() { return std::get<1>(*this).data(); }
+            void *get_obj_addr() { return std::get<0>(*this); }
+        };
+
+        struct S {
+            int f() { return 0; }
+            int g() { return 0; }
+        } s;
+        S1 s1{s};
+        S2 s2{s1};
+        S3 s3{s1};
+        ASSERT(s2.get_tbl_addr() == s1.get_tbl_addr());
+        ASSERT(s2.get_obj_addr() == s1.get_obj_addr());
+        ASSERT(s3.get_tbl_addr() != s1.get_tbl_addr());
+        ASSERT(s3.get_obj_addr() != s1.get_obj_addr());
+    }
+
+    //
     // SOO-aptness depends on sizeof void*
     //
     {
