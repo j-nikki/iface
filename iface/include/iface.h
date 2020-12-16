@@ -88,8 +88,11 @@ constexpr IFACE_INLINE auto from_opaque(From &obj) noexcept
 //
 // iface_base contains reference to the vtable - an array of (opaque) pointers
 // that each point to functions of an implementing class. It also contains
-// reference to an object of that class.
+// an 'opaque', representing a member of an implementing class.
 //
+
+struct token {
+};
 
 template <class T, class U>
 concept equal_base_as =
@@ -100,16 +103,16 @@ concept equal_base_as =
 }
 &&T::sigs == std::remove_cvref_t<U>::sigs;
 
-template <class Tbl, class Token, class TblGetter, class SigGetter>
+template <class Tbl, class TblGetter, class SigGetter>
 struct iface_base : protected std::tuple<opaque, const Tbl &> {
     // I resorted to tuple for data storage due to earlier code generating
     // redundant movaps+movdqa at call site (alignment issues?)
-    using this_type = iface_base<Tbl, Token, TblGetter, SigGetter>;
+    using this_type = iface_base<Tbl, TblGetter, SigGetter>;
     using base_type = std::tuple<opaque, const Tbl &>;
 
     static constexpr auto sigs = SigGetter{}();
 
-    template <class, class, class, class>
+    template <class, class, class>
     friend struct iface_base;
 
   private:
@@ -117,7 +120,7 @@ struct iface_base : protected std::tuple<opaque, const Tbl &> {
     static constexpr Tbl table_for = TblGetter{}.template operator()<T>();
 
   public:
-    constexpr IFACE_INLINE iface_base(Token &&) noexcept
+    explicit constexpr IFACE_INLINE iface_base(token &&) noexcept
         : base_type{nullptr, std::declval<Tbl &>()}
     {
     }
@@ -231,7 +234,7 @@ struct glue<sig<C, R, Args...>, Fn> {
                                          static_cast<Args &&>(args)...);       \
         }                                                                      \
     };                                                                         \
-    return Fn{Token{}};
+    return Fn{::iface::detail::token{}};
 
 // Build often when modifying this macro - ICE-prone
 #define IFACE_mem_fn(r, _, i, x)                                               \
@@ -243,11 +246,11 @@ struct glue<sig<C, R, Args...>, Fn> {
             } else {                                                           \
                 IFACE_mem_fn_ret(i, x, 0)                                      \
             }                                                                  \
-        }.template                                                             \
-        operator()<BOOST_PP_TUPLE_REM(1) BOOST_PP_IF(                          \
-            i, (BOOST_PP_CAT(Fn, BOOST_PP_DEC(i))),                            \
-            (::iface::detail::iface_base<Tbl, Token, TblGetter, SigGetter>))>( \
-            ::iface::detail::sig_t<BOOST_PP_TUPLE_ELEM(1, x)>{}));
+        }                                                                      \
+            .template operator()<BOOST_PP_TUPLE_REM(1) BOOST_PP_IF(            \
+                i, (BOOST_PP_CAT(Fn, BOOST_PP_DEC(i))),                        \
+                (::iface::detail::iface_base<Tbl, TblGetter, SigGetter>))>(    \
+                ::iface::detail::sig_t<BOOST_PP_TUPLE_ELEM(1, x)>{}));
 
 //
 // All is brought together here. Lambdas in unevaluated contexts allow this
@@ -256,8 +259,6 @@ struct glue<sig<C, R, Args...>, Fn> {
 
 #define IFACE_impl(s)                                                          \
     decltype([] {                                                              \
-        struct Token {                                                         \
-        };                                                                     \
         using Tbl       = ::std::array<void *, BOOST_PP_SEQ_SIZE(s)>;          \
         using TblGetter = decltype([]<class T>() {                             \
             return Tbl{BOOST_PP_SEQ_FOR_EACH_I(IFACE_ptrget, _, s)};           \
@@ -266,7 +267,8 @@ struct glue<sig<C, R, Args...>, Fn> {
             return std::array{BOOST_PP_SEQ_FOR_EACH_I(IFACE_sigget, _, s)};    \
         });                                                                    \
         BOOST_PP_SEQ_FOR_EACH_I(IFACE_mem_fn, _, s)                            \
-        return BOOST_PP_CAT(Fn, BOOST_PP_DEC(BOOST_PP_SEQ_SIZE(s))){Token{}};  \
+        return BOOST_PP_CAT(Fn, BOOST_PP_DEC(BOOST_PP_SEQ_SIZE(s))){           \
+            ::iface::detail::token{}};                                         \
     }())
 
 } // namespace detail

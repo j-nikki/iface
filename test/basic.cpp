@@ -134,8 +134,8 @@ int main(int, char **argv)
     }
 
     //
-    // A base copy-constructed from a base that compares equal will use the same
-    // obj and tbl
+    // A copy-constructed base will copy the obj and tbl if and only if the
+    // constructed-from base compares equal
     //
     {
         using If1 = IFACE((f, int())(g, int()));
