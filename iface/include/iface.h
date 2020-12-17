@@ -8,6 +8,7 @@
 #include <boost/preprocessor/stringize.hpp>
 #include <boost/preprocessor/tuple/pop_front.hpp>
 #include <boost/preprocessor/tuple/rem.hpp>
+#include <string_view>
 #include <tuple>
 #include <utility>
 
