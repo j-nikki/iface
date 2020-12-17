@@ -20,6 +20,17 @@ namespace iface
 #define IFACE_inline inline
 #endif
 
+//
+// Small object optimization will copy-construct the object of the type of an
+// implementing class into the place of a pointer which would otherwise store
+// the address of the object.
+//
+
+// Since no running of destructors is supported, the SOO'd object must be
+// trivially destructible. And as to mimic checking for trivial relocatability,
+// the object is checked for trivial copy-constructability. One can provide
+// specialization of this template struct to override the SOO check for a
+// particular type.
 template <class T>
 struct is_soo_apt
     : std::bool_constant<sizeof(T) <= sizeof(void *) &&
@@ -87,9 +98,10 @@ constexpr IFACE_inline auto from_opaque(From &obj) noexcept
 }
 
 //
-// iface_base contains reference to the vtable - an array of (opaque) pointers
-// that each point to functions of an implementing class. It also contains
-// an 'opaque', representing a member of an implementing class.
+// iface_base contains a pointer to the vtable - an array of (opaque) pointers
+// that point to a set of (glue functions of) member functions implementing the
+// interface contract. It also contains an 'opaque', representing an instance of
+// an implementing class.
 //
 
 struct token {
@@ -102,17 +114,19 @@ concept convertible_base_to = To::sigs.size() <= From::sigs.size() &&
                                                    To::sigs.size()),
                                          To::sigs.begin(), To::sigs.end());
 
+// I resorted to tuple for data storage due to earlier code generating
+// redundant movaps+movdqa at call site (alignment issues?)
 template <class Tbl, class TblGetter, class SigGetter>
-struct iface_base : protected std::tuple<opaque, const void **> {
-    // I resorted to tuple for data storage due to earlier code generating
-    // redundant movaps+movdqa at call site (alignment issues?)
+class iface_base : protected std::tuple<opaque, const void **>
+{
+  public:
     using this_type = iface_base<Tbl, TblGetter, SigGetter>;
     using base_type = std::tuple<opaque, const void **>;
 
     static constexpr auto sigs = SigGetter{}();
 
     template <class, class, class>
-    friend struct iface_base;
+    friend class iface_base;
 
   private:
     template <class T>
@@ -244,7 +258,6 @@ struct glue<sig<C, R, Args...>, Fn> {
     };                                                                         \
     return Fn{::iface::detail::token{}};
 
-// Build often when modifying this macro - ICE-prone
 #define IFACE_mem_fn(r, _, i, x)                                               \
     using BOOST_PP_CAT(Fn, i) = decltype(                                      \
         []<class Base, bool C, class R, class... Args>(                        \
@@ -261,8 +274,8 @@ struct glue<sig<C, R, Args...>, Fn> {
                 ::iface::detail::sig_t<BOOST_PP_TUPLE_ELEM(1, x)>{}));
 
 //
-// All is brought together here. Lambdas in unevaluated contexts allow this
-// heresy.
+// Combining the facilities above and, with the advent of P0315R4, using lambdas
+// in unevaluated contexts, we get anonymous interfaces.
 //
 
 #define IFACE_impl(s)                                                          \
