@@ -108,22 +108,22 @@ struct token {
 };
 
 template <class To, class From>
-concept convertible_base_to = To::sigs.size() <= From::sigs.size() &&
-                              std::equal(From::sigs.begin(),
-                                         std::next(From::sigs.begin(),
-                                                   To::sigs.size()),
-                                         To::sigs.begin(), To::sigs.end());
+concept convertible_base_to = std::equal(From::functions.begin(),
+                                         std::next(From::functions.begin(),
+                                                   To::functions.size()),
+                                         To::functions.begin(),
+                                         To::functions.end());
 
 // I resorted to tuple for data storage due to earlier code generating
 // redundant movaps+movdqa at call site (alignment issues?)
-template <class Tbl, class TblGetter, class SigGetter>
+template <class Tbl, class TblGetter, class FnsGetter>
 class iface_base : protected std::tuple<opaque, const void **>
 {
   public:
-    using this_type = iface_base<Tbl, TblGetter, SigGetter>;
+    using this_type = iface_base<Tbl, TblGetter, FnsGetter>;
     using base_type = std::tuple<opaque, const void **>;
 
-    static constexpr auto sigs = SigGetter{}();
+    static constexpr auto functions = FnsGetter{}();
 
     template <class, class, class>
     friend class iface_base;
@@ -163,11 +163,11 @@ class iface_base : protected std::tuple<opaque, const void **>
 
 template <bool Const, class RetTy, class... Args>
 struct sig {
-    static constexpr auto get_signame(std::string_view name)
+    static constexpr auto get_fnsig(std::string_view name)
     {
         std::string_view sv = __FUNCSIG__;
         auto startpos       = sv.find("::sig<") + 6;
-        auto endpos         = sv.rfind(">::get_signame(");
+        auto endpos         = sv.rfind(">::get_fnsig(");
         return std::pair{name, sv.substr(startpos, endpos - startpos)};
     }
 };
@@ -186,9 +186,9 @@ struct sig_impl<R(Args...) const> {
 template <class T>
 using sig_t = typename sig_impl<T>::type;
 
-#define IFACE_sigget(r, _, i, x)                                               \
+#define IFACE_fnsigget(r, _, i, x)                                             \
     BOOST_PP_COMMA_IF(i)::iface::detail::sig_t<BOOST_PP_TUPLE_ELEM(            \
-        1, x)>::get_signame(BOOST_PP_STRINGIZE(BOOST_PP_TUPLE_ELEM(0, x)))
+        1, x)>::get_fnsig(BOOST_PP_STRINGIZE(BOOST_PP_TUPLE_ELEM(0, x)))
 
 //
 // We can't form pointers directly into the implementing classes' member
@@ -270,7 +270,7 @@ struct glue<sig<C, R, Args...>, Fn> {
         }                                                                      \
             .template operator()<BOOST_PP_TUPLE_REM(1) BOOST_PP_IF(            \
                 i, (BOOST_PP_CAT(Fn, BOOST_PP_DEC(i))),                        \
-                (::iface::detail::iface_base<Tbl, TblGetter, SigGetter>))>(    \
+                (::iface::detail::iface_base<Tbl, TblGetter, FnsGetter>))>(    \
                 ::iface::detail::sig_t<BOOST_PP_TUPLE_ELEM(1, x)>{}));
 
 //
@@ -284,8 +284,8 @@ struct glue<sig<C, R, Args...>, Fn> {
         using TblGetter = decltype([]<class T>() {                             \
             return Tbl{BOOST_PP_SEQ_FOR_EACH_I(IFACE_ptrget, _, s)};           \
         });                                                                    \
-        using SigGetter = decltype([] {                                        \
-            return std::array{BOOST_PP_SEQ_FOR_EACH_I(IFACE_sigget, _, s)};    \
+        using FnsGetter = decltype([] {                                        \
+            return std::array{BOOST_PP_SEQ_FOR_EACH_I(IFACE_fnsigget, _, s)};  \
         });                                                                    \
         BOOST_PP_SEQ_FOR_EACH_I(IFACE_mem_fn, _, s)                            \
         return BOOST_PP_CAT(Fn, BOOST_PP_DEC(BOOST_PP_SEQ_SIZE(s))){           \

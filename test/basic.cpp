@@ -121,7 +121,7 @@ int main(int, char **argv)
 
     //
     // Interface can be copy-constructed from another interface of same
-    // signatures+names
+    // functions+names
     //
     {
         struct S {
