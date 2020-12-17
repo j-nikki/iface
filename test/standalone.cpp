@@ -1,5 +1,5 @@
 //
-// Tests for missing headers, syntax, etc.
+// Tests for syntax errors, missing headers, etc.
 //
 
 #include "iface.h"

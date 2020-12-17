@@ -1,3 +1,7 @@
+//
+// Tests for correct behavior of the library.
+//
+
 #include "test_utils.h"
 #include <iface.h>
 
