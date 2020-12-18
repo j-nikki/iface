@@ -115,14 +115,18 @@ concept convertible_base_to = std::equal(From::functions.begin(),
                                          To::functions.begin(),
                                          To::functions.end());
 
+template <class Tbl>
+using tbl_ref_t =
+    std::conditional_t<std::tuple_size_v<Tbl> == 1, Tbl, const Tbl &>;
+
 // I resorted to tuple for data storage due to earlier code generating
 // redundant movaps+movdqa at call site (alignment issues?)
 template <class Tbl, class TblGetter, class FnsGetter>
-class iface_base : protected std::tuple<opaque, const Tbl &>
+class iface_base : protected std::tuple<opaque, tbl_ref_t<Tbl>>
 {
   public:
     using this_type = iface_base<Tbl, TblGetter, FnsGetter>;
-    using base_type = std::tuple<opaque, const Tbl &>;
+    using base_type = std::tuple<opaque, tbl_ref_t<Tbl>>;
 
     static constexpr auto functions = FnsGetter{}();
 
@@ -135,7 +139,7 @@ class iface_base : protected std::tuple<opaque, const Tbl &>
 
   public:
     explicit constexpr IFACE_inline iface_base(token &&) noexcept
-        : base_type{nullptr, std::declval<const Tbl &>()}
+        : base_type{nullptr, std::declval<tbl_ref_t<Tbl>>()}
     {
     }
 #pragma warning(push)
@@ -205,8 +209,9 @@ struct fallback : F {
     requires !std::is_invocable_v<F, Ts &&...> //
         constexpr R operator()(Ts &&...) noexcept
     {
-        static_assert(false, "implementation violates interface contract; this "
-                             "is likely due to function signature mismatch");
+        static_assert(
+            false, "implementation violates interface contract; this is either "
+                   "due to signature mismatch or a missing member function");
     }
 };
 
