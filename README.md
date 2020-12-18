@@ -33,10 +33,9 @@ Example of code generation below. `iface_base` occupies 16B (`tbl` 8B + `obj` 8B
 
 ```c++
 int __declspec(noinline) foo(IFACE((f, int() const)) x) { return x.f(); }
-//  mov         rax,qword ptr [rcx]
+//  mov         rax,qword ptr [rcx]        ; f (tbl SBO)
 //  mov         rcx,qword ptr [rcx+8]      ; obj
-//  mov         rdx,qword ptr [rax]        ; tbl[0]
-//  jmp         rdx
+//  jmp         rax
 
 struct S { int f() const noexcept { return 42; } };
 //  mov         eax,2Ah
@@ -44,10 +43,10 @@ struct S { int f() const noexcept { return 42; } };
 
 int __declspec(noinline) calls_foo() { return foo(S{}); }
 //  sub         rsp,38h
-//  lea         rax,[S> (...)]
+//  lea         rax,[glue::fn (...)]       ; f (tbl SBO)
 //  lea         rcx,[rsp+20h]              ; iface_base at [rsp+20h]
 //  mov         qword ptr [rsp+20h],rax    ; set tbl
-//  call        foo (...)
+//  call        foo (...)                  ; note no obj setup (obj SOO)
 //  add         rsp,38h
 //  ret
 ```
