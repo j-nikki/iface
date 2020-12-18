@@ -118,11 +118,11 @@ concept convertible_base_to = std::equal(From::functions.begin(),
 // I resorted to tuple for data storage due to earlier code generating
 // redundant movaps+movdqa at call site (alignment issues?)
 template <class Tbl, class TblGetter, class FnsGetter>
-class iface_base : protected std::tuple<opaque, const void **>
+class iface_base : protected std::tuple<opaque, const Tbl &>
 {
   public:
     using this_type = iface_base<Tbl, TblGetter, FnsGetter>;
-    using base_type = std::tuple<opaque, const void **>;
+    using base_type = std::tuple<opaque, const Tbl &>;
 
     static constexpr auto functions = FnsGetter{}();
 
@@ -135,7 +135,7 @@ class iface_base : protected std::tuple<opaque, const void **>
 
   public:
     explicit constexpr IFACE_inline iface_base(token &&) noexcept
-        : base_type{nullptr, nullptr}
+        : base_type{nullptr, std::declval<const Tbl &>()}
     {
     }
 #pragma warning(push)
@@ -143,17 +143,14 @@ class iface_base : protected std::tuple<opaque, const void **>
     template <class T>
     requires(!convertible_base_to<this_type, std::remove_cvref_t<T>>) //
         constexpr IFACE_inline iface_base(T &&obj) noexcept
-        : base_type{static_cast<T &&>(obj),
-                    reinterpret_cast<const void **>(const_cast<void *>(
-                        reinterpret_cast<const void *>(table_for<T>.data())))}
+        : base_type{static_cast<T &&>(obj), table_for<T>}
     {
     }
 #pragma warning(pop)
     template <class... Ts>
     constexpr IFACE_inline iface_base(const iface_base<Ts...> &other) noexcept
-        : base_type{std::get<0>(other),
-                    reinterpret_cast<const void **>(const_cast<void *>(
-                        reinterpret_cast<const void *>(std::get<1>(other))))}
+        : base_type{std::get<0>(other), *reinterpret_cast<const Tbl *>(
+                                            std::addressof(std::get<1>(other)))}
     {
     }
 };
