@@ -109,15 +109,17 @@ struct token {
 };
 
 template <class To, class From>
-concept convertible_base_to = std::equal(From::functions.begin(),
-                                         std::next(From::functions.begin(),
-                                                   To::functions.size()),
-                                         To::functions.begin(),
-                                         To::functions.end());
+using base_match = std::integral_constant<
+    std::ptrdiff_t,
+    std::distance(From::functions.begin(),
+                  std::search(From::functions.begin(), From::functions.end(),
+                              To::functions.begin(), To::functions.end()))>;
 
-template <class Tbl>
-using tbl_ref_t =
-    std::conditional_t<std::tuple_size_v<Tbl> == 1, Tbl, const Tbl &>;
+template <class To, class From>
+concept matchable_to = base_match<To, From>::value < From::functions.size();
+
+template <class T>
+using tbl_ref_t = std::conditional_t<std::tuple_size_v<T> == 1, T, const T &>;
 
 // I resorted to tuple for data storage due to earlier code generating
 // redundant movaps+movdqa at call site (alignment issues?)
@@ -145,7 +147,7 @@ class iface_base : protected std::tuple<opaque, tbl_ref_t<Tbl>>
 #pragma warning(push)
 #pragma warning(disable : 4268) // 'object filled with zeroes'
     template <class T>
-    requires(!convertible_base_to<this_type, std::remove_cvref_t<T>>) //
+    requires(!matchable_to<this_type, std::remove_cvref_t<T>>) //
         constexpr IFACE_inline iface_base(T &&obj) noexcept
         : base_type{static_cast<T &&>(obj), table_for<T>}
     {
@@ -153,8 +155,10 @@ class iface_base : protected std::tuple<opaque, tbl_ref_t<Tbl>>
 #pragma warning(pop)
     template <class... Ts>
     constexpr IFACE_inline iface_base(const iface_base<Ts...> &other) noexcept
-        : base_type{std::get<0>(other), *reinterpret_cast<const Tbl *>(
-                                            std::addressof(std::get<1>(other)))}
+        : base_type{
+              std::get<0>(other),
+              *reinterpret_cast<const Tbl *>(&std::get<1>(
+                  other)[base_match<this_type, iface_base<Ts...>>::value])}
     {
     }
 };

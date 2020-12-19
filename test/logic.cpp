@@ -146,9 +146,9 @@ int main(int, char **argv)
     using If##N = IFACE(__VA_ARGS__);                                          \
     struct S##N : If##N {                                                      \
         using If##N::If##N;                                                    \
-        auto get_tbl_addr()                                                    \
+        auto get_tbl_addr(std::size_t idx = 0)                                 \
         {                                                                      \
-            return (const void *)std::addressof(std::get<1>(*this));           \
+            return (const void *)&std::get<1>(*this)[idx];                     \
         }                                                                      \
         auto get_obj_addr() { return (const void *)std::get<0>(*this); }       \
     };
@@ -156,8 +156,10 @@ int main(int, char **argv)
         LOGIC_ctor(1, (f, int())(g, int())(h, int()));
         LOGIC_ctor(2, (f, int())(g, int())(h, int()));
         LOGIC_ctor(3, (f, int())(g, int()));
-        LOGIC_ctor(4, (g, int())(f, int()));
-        LOGIC_ctor(5, (f, int()));
+        LOGIC_ctor(4, (g, int())(h, int()));
+        LOGIC_ctor(5, (g, int())(f, int()));
+        LOGIC_ctor(6, (f, int()));
+        LOGIC_ctor(7, (g, int()));
 
         struct {
             int f() { return 0; }
@@ -168,17 +170,23 @@ int main(int, char **argv)
         S1 s1{s};
         S2 s2{s1}; // equal => copy reference
         S3 s3{s1}; // subset => copy reference
-        S4 s4{s1}; // wrong order => employ glue
-        S5 s5{s1}; // table of one => copy value
+        S4 s4{s1}; // subset => copy reference
+        S5 s5{s1}; // wrong order => employ glue
+        S6 s6{s1}; // table of one => copy value
+        S7 s7{s1}; // table of one => copy value
 
         ASSERT(s2.get_tbl_addr() == s1.get_tbl_addr());
         ASSERT(s2.get_obj_addr() == s1.get_obj_addr());
         ASSERT(s3.get_tbl_addr() == s1.get_tbl_addr());
         ASSERT(s3.get_obj_addr() == s1.get_obj_addr());
-        ASSERT(s4.get_tbl_addr() != s1.get_tbl_addr());
-        ASSERT(s4.get_obj_addr() != s1.get_obj_addr());
+        ASSERT(s4.get_tbl_addr() == s1.get_tbl_addr(1));
+        ASSERT(s4.get_obj_addr() == s1.get_obj_addr());
         ASSERT(s5.get_tbl_addr() != s1.get_tbl_addr());
-        ASSERT(s5.get_obj_addr() == s1.get_obj_addr());
+        ASSERT(s5.get_obj_addr() != s1.get_obj_addr());
+        ASSERT(s6.get_tbl_addr() != s1.get_tbl_addr());
+        ASSERT(s6.get_obj_addr() == s1.get_obj_addr());
+        ASSERT(s7.get_tbl_addr() != s1.get_tbl_addr());
+        ASSERT(s7.get_obj_addr() == s1.get_obj_addr());
     }
 
     //
@@ -191,35 +199,6 @@ int main(int, char **argv)
         } s{42};
         ASSERT((IFACE((f, intptr_t() const)){s}.f() == s.f()) ==
                (sizeof(intptr_t) <= sizeof(void *)));
-    }
-
-    //
-    // equal_base_as works correctly
-    //
-    {
-        // these trigger 2057: expected constant expression (?)
-        // using iface::detail::equal_base_as;
-        // using If = IFACE((f, int()));
-        //
-        //// Same name and signature
-        // static_assert(equal_base_as<If, IFACE((f, int()))>);
-        //
-        //// Different name
-        // static_assert(!equal_base_as<If, IFACE((g, int()))>);
-        //
-        //// Different signature
-        // static_assert(!equal_base_as<If, IFACE((f, float()))>);
-        //
-        //// Different constness
-        // static_assert(!equal_base_as<If, IFACE((f, int() const))>);
-        //
-        //// Same order
-        // static_assert(equal_base_as<IFACE((f, int())(g, int())),
-        //                            IFACE((f, int())(g, int()))>);
-        //
-        //// Wrong order
-        // static_assert(!equal_base_as<IFACE((f, int())(g, int())),
-        //                             IFACE((g, int())(f, int()))>);
     }
 
     printf("%s: ",
