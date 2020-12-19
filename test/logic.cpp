@@ -193,12 +193,12 @@ int main(int, char **argv)
     // SOO-aptness depends on sizeof void*
     //
     {
-        const struct S {
+        struct S {
             int64_t x;
             intptr_t f() const { return (intptr_t)(void *)this; }
-        } s{42};
-        ASSERT((IFACE((f, intptr_t() const)){s}.f() == s.f()) ==
-               (sizeof(intptr_t) <= sizeof(void *)));
+        };
+        static_assert(iface::is_soo_apt<S>::value ==
+                      (sizeof(int64_t) <= sizeof(void *)));
     }
 
     printf("%s: ",

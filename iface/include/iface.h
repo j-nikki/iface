@@ -15,7 +15,7 @@
 namespace iface
 {
 
-#if defined(_MSC_VER) && !defined(__INTEL_COMPILER) && _MSC_VER >= 1310
+#if defined(_MSC_VER) && !defined(__INTEL_COMPILER)
 #define IFACE_inline inline __forceinline
 #else
 #define IFACE_inline inline
@@ -224,10 +224,13 @@ struct glue;
 template <bool C, class R, class... Args, class Fn>
 struct glue<sig<C, R, Args...>, Fn> {
     using object_ptr = std::conditional_t<C, const void *, void *>;
+#pragma warning(push)
+#pragma warning(error : 4172) // prevents returning addresses of SOO instances
     static R fn(object_ptr object, fwd_t<Args>... args)
     {
         return fallback<R, Fn>{}(object, args...);
     }
+#pragma warning(pop)
 };
 
 #define IFACE_call(f)                                                          \
