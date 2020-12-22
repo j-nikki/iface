@@ -25,6 +25,19 @@ int main(int, char **argv)
     }
 
     //
+    // Const member functions and non-so are discerned appropriately
+    //
+    {
+        struct S {
+            int f() { return 1; }
+            int f() const { return 2; }
+        } s;
+        IFACE((f, int())(f, int() const)) lifted = s;
+        ASSERT(lifted.f() == 1);
+        ASSERT([](const auto &x) { return x.f(); }(lifted) == 2);
+    }
+
+    //
     // Object address is passed correctly
     //
     {
