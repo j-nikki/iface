@@ -290,6 +290,16 @@ struct glue<sig<C, R, Args...>, Fn> {
 // in unevaluated contexts, we get anonymous interfaces.
 //
 
+#define IFACE_using(r, _, i, x)                                                \
+    using BOOST_PP_CAT(Fn, i)::BOOST_PP_TUPLE_ELEM(0, x);
+
+#define IFACE_ret_res(base, s)                                                 \
+    struct anonymous_interface : base {                                        \
+        using base::base;                                                      \
+        BOOST_PP_SEQ_FOR_EACH_I(IFACE_using, _, s)                             \
+    };                                                                         \
+    return anonymous_interface{::iface::detail::token{}};
+
 #define IFACE_impl(s)                                                          \
     decltype([] {                                                              \
         using Tbl       = ::std::array<void *, BOOST_PP_SEQ_SIZE(s)>;          \
@@ -300,8 +310,7 @@ struct glue<sig<C, R, Args...>, Fn> {
             return std::array{BOOST_PP_SEQ_FOR_EACH_I(IFACE_fnsigget, _, s)};  \
         });                                                                    \
         BOOST_PP_SEQ_FOR_EACH_I(IFACE_mem_fn, _, s)                            \
-        return BOOST_PP_CAT(Fn, BOOST_PP_DEC(BOOST_PP_SEQ_SIZE(s))){           \
-            ::iface::detail::token{}};                                         \
+        IFACE_ret_res(BOOST_PP_CAT(Fn, BOOST_PP_DEC(BOOST_PP_SEQ_SIZE(s))), s) \
     }())
 
 } // namespace detail
