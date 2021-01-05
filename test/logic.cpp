@@ -3,7 +3,16 @@
 //
 
 #include "test_utils.h"
+
 #include <iface.h>
+#include <memory>
+
+#define LOGIC_has_member_fn(s, f, ...)                                         \
+    std::is_invocable_v<decltype([](auto &&x) -> std::type_identity<decltype(  \
+                                                  x.f(__VA_ARGS__))> {         \
+                            return {};                                         \
+                        }),                                                    \
+                        s>
 
 int main(int, char **argv)
 {
@@ -212,6 +221,39 @@ int main(int, char **argv)
         };
         static_assert(iface::is_soo_apt<S>::value ==
                       (sizeof(int64_t) <= sizeof(void *)));
+    }
+
+    //
+    // No access violations arise when copied-from iface destructs and concerns
+    //
+    {
+        struct S {
+            int f() { return 0; }
+            int g() { return 0; }
+        };
+        S s;
+
+        const auto test = [&]<class T>() {
+            return test_utils::catch_access_violation([&] {
+                auto dst = [&]() -> T {
+                    auto src = std::make_unique<IFACE((f, int())(g, int()))>(s);
+                    return *src;
+                }();
+                if constexpr (LOGIC_has_member_fn(decltype((dst)), f))
+                    ASSERT(dst.f() == 0);
+                else
+                    ASSERT(dst.g() == 0);
+            });
+        };
+#define IFACE_access_test(...) test.template operator()<IFACE(__VA_ARGS__)>()
+
+        // ... an interface superset
+        const auto ok1 = IFACE_access_test((f, int())(g, int()));
+        ASSERT_FALSE(ok1);
+        const auto ok2 = IFACE_access_test((f, int()));
+        ASSERT_FALSE(ok2);
+        const auto ok3 = IFACE_access_test((g, int()));
+        ASSERT_FALSE(ok3);
     }
 
     printf("%s: ",
