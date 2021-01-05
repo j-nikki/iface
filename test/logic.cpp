@@ -245,14 +245,14 @@ int main(int, char **argv)
                     ASSERT(dst.g() == 0);
             });
         };
-#define IFACE_access_test(...) test.template operator()<IFACE(__VA_ARGS__)>()
+#define LOGIC_access_test(...) test.template operator()<IFACE(__VA_ARGS__)>()
 
         // ... an interface superset
-        const auto ok1 = IFACE_access_test((f, int())(g, int()));
+        const auto ok1 = LOGIC_access_test((f, int())(g, int()));
         ASSERT_FALSE(ok1);
-        const auto ok2 = IFACE_access_test((f, int()));
+        const auto ok2 = LOGIC_access_test((f, int()));
         ASSERT_FALSE(ok2);
-        const auto ok3 = IFACE_access_test((g, int()));
+        const auto ok3 = LOGIC_access_test((g, int()));
         ASSERT_FALSE(ok3);
     }
 
