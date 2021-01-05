@@ -54,7 +54,6 @@ inline bool catch_access_violation(F &&f, Args &&...args)
     } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION
                     ? EXCEPTION_EXECUTE_HANDLER
                     : EXCEPTION_CONTINUE_SEARCH) {
-
         return true;
     }
     return false;

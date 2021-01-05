@@ -230,30 +230,53 @@ int main(int, char **argv)
         struct S {
             int f() { return 0; }
             int g() { return 0; }
+            int h() { return 0; }
         };
         S s;
 
         const auto test = [&]<class T>() {
             return test_utils::catch_access_violation([&] {
                 auto dst = [&]() -> T {
-                    auto src = std::make_unique<IFACE((f, int())(g, int()))>(s);
+                    auto src =
+                        std::make_unique<IFACE((f, int())(g, int())(h, int()))>(
+                            s);
                     return *src;
                 }();
                 if constexpr (LOGIC_has_member_fn(decltype((dst)), f))
                     ASSERT(dst.f() == 0);
-                else
+                else if constexpr (LOGIC_has_member_fn(decltype((dst)), g))
                     ASSERT(dst.g() == 0);
+                else
+                    ASSERT(dst.h() == 0);
             });
         };
 #define LOGIC_access_test(...) test.template operator()<IFACE(__VA_ARGS__)>()
 
         // ... an interface superset
-        const auto ok1 = LOGIC_access_test((f, int())(g, int()));
-        ASSERT_FALSE(ok1);
-        const auto ok2 = LOGIC_access_test((f, int()));
-        ASSERT_FALSE(ok2);
-        const auto ok3 = LOGIC_access_test((g, int()));
-        ASSERT_FALSE(ok3);
+        const auto at1 = LOGIC_access_test((f, int())(g, int())(h, int()));
+        ASSERT_FALSE(at1);
+        const auto at2 = LOGIC_access_test((f, int())(g, int()));
+        ASSERT_FALSE(at2);
+        const auto at3 = LOGIC_access_test((g, int())(h, int()));
+        ASSERT_FALSE(at3);
+        const auto at4 = LOGIC_access_test((f, int()));
+        ASSERT_FALSE(at4);
+        const auto at5 = LOGIC_access_test((g, int()));
+        ASSERT_FALSE(at5);
+        const auto at6 = LOGIC_access_test((h, int()));
+        ASSERT_FALSE(at6);
+
+        // ... not an interface superset
+        const auto at7 = LOGIC_access_test((h, int())(g, int())(f, int()));
+        ASSERT_FALSE(at7);
+        const auto at8 = LOGIC_access_test((h, int())(f, int())(g, int()));
+        ASSERT_FALSE(at8);
+        const auto at9 = LOGIC_access_test((g, int())(f, int()));
+        ASSERT_FALSE(at9);
+        const auto at10 = LOGIC_access_test((h, int())(g, int()));
+        ASSERT_FALSE(at10);
+        const auto at11 = LOGIC_access_test((f, int())(h, int()));
+        ASSERT_FALSE(at11);
     }
 
     printf("%s: ",
