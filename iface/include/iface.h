@@ -121,6 +121,11 @@ template <class To, class From>
 concept matchable_to = base_match<To, From>::value < From::functions.size();
 
 template <class T>
+concept base = std::is_same_v<
+    std::tuple_element_t<0, typename std::remove_cvref_t<T>::base_type>,
+    opaque>;
+
+template <class T>
 using tbl_ref_t = std::conditional_t<std::tuple_size_v<T> == 1, T, const T &>;
 
 // I resorted to tuple for data storage due to earlier code generating
@@ -149,18 +154,18 @@ class iface_base : protected std::tuple<opaque, tbl_ref_t<Tbl>>
 #pragma warning(push)
 #pragma warning(disable : 4268) // 'object filled with zeroes'
     template <class T>
-    requires(!matchable_to<this_type, std::remove_cvref_t<T>>) //
+    requires(!base<T>) //
         constexpr IFACE_inline iface_base(T &&obj) noexcept
         : base_type{static_cast<T &&>(obj), table_for<T>}
     {
     }
 #pragma warning(pop)
-    template <class... Ts>
-    constexpr IFACE_inline iface_base(const iface_base<Ts...> &other) noexcept
-        : base_type{
-              std::get<0>(other),
-              *reinterpret_cast<const Tbl *>(&std::get<1>(
-                  other)[base_match<this_type, iface_base<Ts...>>::value])}
+    template <class T>
+    requires(matchable_to<this_type, T>) //
+        constexpr IFACE_inline iface_base(const T &other) noexcept
+        : base_type{std::get<0>(other),
+                    *reinterpret_cast<const Tbl *>(
+                        &std::get<1>(other)[base_match<this_type, T>::value])}
     {
     }
 };

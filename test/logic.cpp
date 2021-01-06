@@ -193,7 +193,7 @@ int main(int, char **argv)
         S2 s2{s1}; // equal => copy reference
         S3 s3{s1}; // subset => copy reference
         S4 s4{s1}; // subset => copy reference
-        S5 s5{s1}; // wrong order => employ glue
+        static_assert(!std::is_constructible_v<S5, S1 &>);
         S6 s6{s1}; // table of one => copy value
         S7 s7{s1}; // table of one => copy value
 
@@ -203,8 +203,6 @@ int main(int, char **argv)
         ASSERT(s3.get_obj_addr() == s1.get_obj_addr());
         ASSERT(s4.get_tbl_addr() == s1.get_tbl_addr(1));
         ASSERT(s4.get_obj_addr() == s1.get_obj_addr());
-        ASSERT(s5.get_tbl_addr() != s1.get_tbl_addr());
-        ASSERT(s5.get_obj_addr() != s1.get_obj_addr());
         ASSERT(s6.get_tbl_addr() != s1.get_tbl_addr());
         ASSERT(s6.get_obj_addr() == s1.get_obj_addr());
         ASSERT(s7.get_tbl_addr() != s1.get_tbl_addr());
@@ -225,6 +223,7 @@ int main(int, char **argv)
 
     //
     // No access violations arise when copied-from iface destructs and concerns
+    // an interface superset
     //
     {
         struct S {
@@ -236,23 +235,20 @@ int main(int, char **argv)
 
         const auto test = [&]<class T>() {
             return test_utils::catch_access_violation([&] {
-                auto dst = [&]() -> T {
-                    auto src =
-                        std::make_unique<IFACE((f, int())(g, int())(h, int()))>(
-                            s);
-                    return *src;
+                auto x = [&]() -> T {
+                    return *std::make_unique<IFACE(
+                        (f, int())(g, int())(h, int()))>(s);
                 }();
-                if constexpr (LOGIC_has_member_fn(decltype((dst)), f))
-                    ASSERT(dst.f() == 0);
-                else if constexpr (LOGIC_has_member_fn(decltype((dst)), g))
-                    ASSERT(dst.g() == 0);
+                if constexpr (LOGIC_has_member_fn(decltype((x)), f))
+                    ASSERT(x.f() == 0);
+                else if constexpr (LOGIC_has_member_fn(decltype((x)), g))
+                    ASSERT(x.g() == 0);
                 else
-                    ASSERT(dst.h() == 0);
+                    ASSERT(x.h() == 0);
             });
         };
 #define LOGIC_access_test(...) test.template operator()<IFACE(__VA_ARGS__)>()
 
-        // ... an interface superset
         const auto at1 = LOGIC_access_test((f, int())(g, int())(h, int()));
         ASSERT_FALSE(at1);
         const auto at2 = LOGIC_access_test((f, int())(g, int()));
@@ -265,18 +261,6 @@ int main(int, char **argv)
         ASSERT_FALSE(at5);
         const auto at6 = LOGIC_access_test((h, int()));
         ASSERT_FALSE(at6);
-
-        // ... not an interface superset
-        const auto at7 = LOGIC_access_test((h, int())(g, int())(f, int()));
-        ASSERT_FALSE(at7);
-        const auto at8 = LOGIC_access_test((h, int())(f, int())(g, int()));
-        ASSERT_FALSE(at8);
-        const auto at9 = LOGIC_access_test((g, int())(f, int()));
-        ASSERT_FALSE(at9);
-        const auto at10 = LOGIC_access_test((h, int())(g, int()));
-        ASSERT_FALSE(at10);
-        const auto at11 = LOGIC_access_test((f, int())(h, int()));
-        ASSERT_FALSE(at11);
     }
 
     printf("%s: ",
