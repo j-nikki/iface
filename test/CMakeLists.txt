@@ -6,7 +6,7 @@ enable_testing()
 
 # Target without output, running it will run all unit tests
 add_custom_target(
-  tests
+  iface-tests
   COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
   USES_TERMINAL)
 
@@ -26,6 +26,6 @@ foreach(ut IN LISTS UNIT_TESTS)
   add_executable(${target} EXCLUDE_FROM_ALL "${ut}" "test_utils.h")
   add_test(${target} ${target})
   target_link_libraries(${target} iface)
-  add_dependencies(tests ${target})
+  add_dependencies(iface-tests ${target})
 
 endforeach()
