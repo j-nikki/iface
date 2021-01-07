@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.14)
 
-# We use vcpkg as a submodule
+# Use vcpkg as a submodule
 set(CMAKE_TOOLCHAIN_FILE
     ${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake
     CACHE STRING "Vcpkg toolchain file")
@@ -21,7 +21,7 @@ get_directory_property(parent PARENT_DIRECTORY)
 if(NOT parent)
   set(CMAKE_CXX_STANDARD 20)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
-elseif($CMAKE_CXX_STANDARD LESS 20 OR NOT $CMAKE_CXX_STANDARD_REQUIRED)
+elseif(CMAKE_CXX_STANDARD LESS 20 OR NOT CMAKE_CXX_STANDARD_REQUIRED)
   message("iface uses C++20 features, reconsider the C++ standard settings")
 endif()
 
