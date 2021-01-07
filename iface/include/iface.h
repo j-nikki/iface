@@ -1,4 +1,6 @@
-﻿#include <algorithm>
+﻿#pragma once
+
+#include <algorithm>
 #include <array>
 #include <boost/preprocessor/control/expr_iif.hpp>
 #include <boost/preprocessor/punctuation/comma_if.hpp>
